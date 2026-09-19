@@ -94,7 +94,7 @@ func TestCodexHarvestScopeLegacyAndRuntimeChange(t *testing.T) {
 }
 
 func TestCodexHarvestPriorityRoundRobinAndDeferredBudget(t *testing.T) {
-	s, u, _ := harvestScopeService(t, "", []Account{
+	s, u, _ := harvestScopeService(t, `{"mode":"all","group_ids":[],"account_policy":"prioritize_schedulable"}`, []Account{
 		harvestScopeAccount(9, false, 2), harvestScopeAccount(1, true, 2), harvestScopeAccount(2, true, 2),
 	}, 1)
 	s.refreshOpenAICodexTickets(context.Background())
@@ -108,7 +108,7 @@ func TestCodexHarvestPriorityRoundRobinAndDeferredBudget(t *testing.T) {
 }
 
 func TestCodexHarvestPriorityCompletesFirstTierBeforeDeferred(t *testing.T) {
-	s, u, _ := harvestScopeService(t, "", []Account{harvestScopeAccount(9, false, 2), harvestScopeAccount(1, true, 2)}, 6)
+	s, u, _ := harvestScopeService(t, `{"mode":"all","group_ids":[],"account_policy":"prioritize_schedulable"}`, []Account{harvestScopeAccount(9, false, 2), harvestScopeAccount(1, true, 2)}, 6)
 	s.refreshOpenAICodexTickets(context.Background())
 	require.Equal(t, []int64{1, 9}, u.ids)
 }
@@ -121,7 +121,7 @@ func TestCodexHarvestPrioritySkipsFreshTicketsAndHonorsChangedScheduling(t *test
 		Model: "gpt-6-astra", State: fakeCodexTicketState(292), Length: 292, ExpiresAt: time.Now().Add(time.Hour),
 	})
 	s.refreshOpenAICodexTickets(context.Background())
-	require.Equal(t, []int64{2}, u.ids)
+	require.Empty(t, u.ids)
 	// A formerly deferred account takes priority as soon as its switch changes.
 	s, u, _ = harvestScopeService(t, "", []Account{first, second}, 1)
 	first.Schedulable, second.Schedulable = false, true
@@ -134,7 +134,10 @@ func TestCodexHarvestScopeNormalization(t *testing.T) {
 	scope, err := NormalizeCodexTicketHarvestScope(CodexTicketHarvestScope{Mode: "selected", GroupIDs: []int64{24, 2, 2}})
 	require.NoError(t, err)
 	require.Equal(t, []int64{2, 24}, scope.GroupIDs)
+	require.Equal(t, CodexHarvestSchedulableOnly, scope.AccountPolicy)
 	_, err = NormalizeCodexTicketHarvestScope(CodexTicketHarvestScope{Mode: "selected", GroupIDs: []int64{0}})
+	require.Error(t, err)
+	_, err = NormalizeCodexTicketHarvestScope(CodexTicketHarvestScope{Mode: "all", AccountPolicy: "unknown"})
 	require.Error(t, err)
 }
 
@@ -147,13 +150,56 @@ func TestCodexHarvestGroupPriorityAndSchedulableOrder(t *testing.T) {
 	low.AccountGroups = []AccountGroup{{GroupID: 2, Priority: 20}}
 	deferred := harvestScopeAccount(3, false, 2)
 	deferred.AccountGroups = []AccountGroup{{GroupID: 2, Priority: -1000}}
-	s, u, _ := harvestScopeService(t, `{"mode":"selected","group_ids":[2]}`, []Account{deferred, low, high}, 6)
+	s, u, _ := harvestScopeService(t, `{"mode":"selected","group_ids":[2],"account_policy":"prioritize_schedulable"}`, []Account{deferred, low, high}, 6)
 	s.refreshOpenAICodexTickets(context.Background())
 	require.Equal(t, []int64{1, 2, 3}, u.ids)
 	scope := CodexTicketHarvestScope{Mode: "selected", GroupIDs: []int64{2}}
 	require.Equal(t, 10, scope.priority(&high)) // Ignore unselected group 24.
 	scope.GroupIDs = []int64{2, 24}
 	require.Equal(t, -100, scope.priority(&high))
+}
+
+func TestCodexHarvestAlwaysSkipsOperationallyUnavailableAccounts(t *testing.T) {
+	now := time.Now()
+	limited := harvestScopeAccount(1, true, 2)
+	limited.RateLimitResetAt = pointerTo(now.Add(time.Hour))
+	overloaded := harvestScopeAccount(2, true, 2)
+	overloaded.OverloadUntil = pointerTo(now.Add(time.Hour))
+	cooling := harvestScopeAccount(3, true, 2)
+	cooling.TempUnschedulableUntil = pointerTo(now.Add(time.Hour))
+	expired := harvestScopeAccount(4, true, 2)
+	expired.AutoPauseOnExpired = true
+	expired.ExpiresAt = pointerTo(now.Add(-time.Hour))
+	s, u, _ := harvestScopeService(t, `{"mode":"all","group_ids":[],"account_policy":"prioritize_schedulable"}`, []Account{limited, overloaded, cooling, expired}, 20)
+	s.refreshOpenAICodexTickets(context.Background())
+	require.Empty(t, u.ids)
+}
+
+func pointerTo[T any](value T) *T { return &value }
+
+func TestCodexHarvestSelectedProPoolDoesNotSpendBudgetOnFreePool(t *testing.T) {
+	accounts := make([]Account, 0, 1001)
+	for id := int64(1); id <= 1000; id++ {
+		accounts = append(accounts, harvestScopeAccount(id, false, 1))
+	}
+	accounts = append(accounts, harvestScopeAccount(1001, true, 2))
+	s, u, _ := harvestScopeService(t, `{"mode":"selected","group_ids":[2]}`, accounts, 1)
+	s.refreshOpenAICodexTickets(context.Background())
+	require.Equal(t, []int64{1001}, u.ids)
+}
+
+func TestCodexHarvestSelectedGroupMustRemainActive(t *testing.T) {
+	a := harvestScopeAccount(1, true, 2, 3)
+	a.Groups = []*Group{
+		{ID: 2, Status: "inactive", Platform: PlatformOpenAI},
+		{ID: 3, Status: StatusActive, Platform: PlatformOpenAI},
+	}
+	s, u, repo := harvestScopeService(t, `{"mode":"selected","group_ids":[2]}`, []Account{a}, 1)
+	s.refreshOpenAICodexTickets(context.Background())
+	require.Empty(t, u.ids)
+	repo.values[SettingKeyOpenAICodexTicketHarvestScope] = `{"mode":"selected","group_ids":[2,3]}`
+	s.refreshOpenAICodexTickets(context.Background())
+	require.Equal(t, []int64{1}, u.ids)
 }
 
 func TestCodexHarvestGroupPriorityDoesNotRotateLowerPriorityAhead(t *testing.T) {

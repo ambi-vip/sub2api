@@ -4516,12 +4516,29 @@
                     v-model="form.openai_codex_ticket_enabled"
                   />
                 </div>
+                <div class="flex items-center justify-between gap-4 rounded-lg border border-gray-200 p-4 dark:border-dark-600">
+                  <div class="min-w-0">
+                    <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+                      {{ t("admin.settings.gatewayForwarding.codexTicketFailClosed") }}
+                    </h3>
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {{ t("admin.settings.gatewayForwarding.codexTicketFailClosedDesc") }}
+                    </p>
+                  </div>
+                  <Toggle
+                    id="codex-ticket-fail-closed"
+                    v-model="form.openai_codex_ticket_fail_closed"
+                  />
+                </div>
                 <div class="rounded-lg border border-gray-200 p-4 dark:border-dark-600">
                   <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
                     {{ t("admin.settings.gatewayForwarding.codexTicketModels") }}
                   </h3>
                   <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                     {{ t("admin.settings.gatewayForwarding.codexTicketModelsDesc") }}
+                  </p>
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {{ t("admin.settings.gatewayForwarding.codexTicketShapeNotice") }}
                   </p>
                   <div class="mt-3 grid gap-3 sm:grid-cols-2">
                     <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
@@ -9939,6 +9956,7 @@ const form = reactive<SettingsForm>({
   openai_codex_client_version_synced: "",
   openai_codex_version_auto_sync_enabled: true,
   openai_codex_ticket_enabled: false,
+  openai_codex_ticket_fail_closed: false,
   openai_codex_ticket_harvest_scope: { mode: 'all', group_ids: [], account_policy: 'schedulable_only' },
   openai_codex_ticket_harvest_proxy_url: "",
   openai_codex_ticket_harvest_proxy_configured: false,
@@ -11566,6 +11584,7 @@ async function saveSettings() {
       openai_codex_version_auto_sync_enabled:
         form.openai_codex_version_auto_sync_enabled,
       openai_codex_ticket_enabled: form.openai_codex_ticket_enabled,
+      openai_codex_ticket_fail_closed: form.openai_codex_ticket_fail_closed,
       openai_codex_ticket_harvest_scope: {
         mode: form.openai_codex_ticket_harvest_scope.mode,
         group_ids: [...form.openai_codex_ticket_harvest_scope.group_ids],

@@ -251,6 +251,7 @@ type SystemSettings struct {
 	OpenAICodexClientVersionSynced         string   // 自动同步到的官方最新稳定版版本号（只读展示）
 	OpenAICodexVersionAutoSyncEnabled      bool     // 是否启用 Codex 客户端版本号自动同步（默认 true）
 	OpenAICodexTicketEnabled               bool     // Codex 292 打票总开关；关闭则不打票不注入
+	OpenAICodexTicketFailClosed            bool     // 无有效票据时是否暂停目标模型账号；默认 false
 	OpenAICodexTicketHarvestProxyURL       string   // Codex 292 打票代理 URL；空则回退 yaml/env
 	OpenAICodexTicketHarvestScope          CodexTicketHarvestScope
 	OpenAICodexTicketModels                []string // Codex 292 打票模型列表；缺失时回退 yaml/env

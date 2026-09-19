@@ -17,7 +17,7 @@ type codexTicketSettingRepo struct {
 }
 
 func TestCodexTicketModelsRuntimeDisableAndEmpty(t *testing.T) {
-	repo := &codexTicketSettingRepo{codexPolicyMigrationRepoStub: &codexPolicyMigrationRepoStub{values: map[string]string{}}}
+	repo := &codexTicketSettingRepo{codexPolicyMigrationRepoStub: &codexPolicyMigrationRepoStub{values: map[string]string{SettingKeyOpenAICodexTicketFailClosed: "true"}}}
 	settings := NewSettingService(repo, &config.Config{})
 	svc := ticketTestService(t, config.OpenAICodexTicketConfig{Enabled: true, FailClosed: true}, nil)
 	svc.settingService = settings
@@ -46,6 +46,28 @@ func TestCodexTicketModelsRuntimeDisableAndEmpty(t *testing.T) {
 	svc.accountRepo = &codexTicketRefreshRepo{accounts: []Account{*account}}
 	svc.refreshOpenAICodexTickets(ctx)
 	require.Empty(t, upstream.requests)
+}
+
+func TestCodexTicketFailClosedRuntimeSettingDefaultsOffAndHotReloads(t *testing.T) {
+	repo := &codexTicketSettingRepo{codexPolicyMigrationRepoStub: &codexPolicyMigrationRepoStub{values: map[string]string{}}}
+	settings := NewSettingService(repo, &config.Config{})
+	svc := ticketTestService(t, config.OpenAICodexTicketConfig{Enabled: true, FailClosed: true}, nil)
+	svc.settingService = settings
+	account := ticketTestAccount(41)
+
+	require.False(t, settings.GetOpenAICodexTicketFailClosed(context.Background()))
+	require.False(t, svc.openAICodexTicketBlocksAccount(account, "gpt-6-astra"))
+	require.NoError(t, svc.applyOpenAICodexTicket(context.Background(), account, "gpt-6-astra", http.Header{}))
+
+	repo.values[SettingKeyOpenAICodexTicketFailClosed] = "true"
+	settings.InvalidateOpenAICodexTicketFailClosedCache()
+	require.True(t, settings.GetOpenAICodexTicketFailClosed(context.Background()))
+	require.True(t, svc.openAICodexTicketBlocksAccount(account, "gpt-6-astra"))
+	require.ErrorIs(t, svc.applyOpenAICodexTicket(context.Background(), account, "gpt-6-astra", http.Header{}), ErrOpenAICodexTicketUnavailable)
+
+	repo.values[SettingKeyOpenAICodexTicketFailClosed] = "false"
+	settings.InvalidateOpenAICodexTicketFailClosedCache()
+	require.False(t, svc.openAICodexTicketBlocksAccount(account, "gpt-6-astra"))
 }
 
 func (r *codexTicketSettingRepo) GetValue(ctx context.Context, key string) (string, error) {

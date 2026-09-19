@@ -63,3 +63,104 @@ func TestSettingsCodexTicketModelsPersistOmissionAndEmpty(t *testing.T) {
 		require.Equal(t, saved, repo.values[key])
 	}
 }
+
+func TestSettingsCodexHarvestScopeRoundTripOmissionAndValidation(t *testing.T) {
+	key := service.SettingKeyOpenAICodexTicketHarvestScope
+	h, repo := newStepUpSwitchTestHandler(t, map[string]string{})
+	for _, scope := range []map[string]any{
+		{"mode": "selected", "group_ids": []int64{24, 2, 2}, "account_policy": "schedulable_only"},
+		{"mode": "selected", "group_ids": []int64{}, "account_policy": "prioritize_schedulable"},
+		{"mode": "all", "group_ids": []int64{}, "account_policy": "schedulable_only"},
+	} {
+		rec := doUpdateSettings(t, h, map[string]any{key: scope}, nil)
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		saved := repo.values[key]
+		rec = doUpdateSettings(t, h, map[string]any{"site_name": "unchanged-scope"}, nil)
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		require.Equal(t, saved, repo.values[key])
+	}
+	for _, scope := range []map[string]any{
+		{"mode": "unknown"},
+		{"mode": "selected", "group_ids": []int64{-1}},
+		{"mode": "all", "account_policy": "unknown"},
+		{"group_ids": []int64{2}},
+	} {
+		saved := repo.values[key]
+		rec := doUpdateSettings(t, h, map[string]any{key: scope}, nil)
+		require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+		require.Equal(t, saved, repo.values[key])
+	}
+}
+
+type ticketHarvestGroupReader struct {
+	groups map[int64]*service.Group
+}
+
+func (r *ticketHarvestGroupReader) GetByID(_ context.Context, id int64) (*service.Group, error) {
+	if group := r.groups[id]; group != nil {
+		return group, nil
+	}
+	return nil, service.ErrGroupNotFound
+}
+
+func TestSettingsCodexHarvestScopeValidatesGroupsAndPreservesDeletedSelection(t *testing.T) {
+	key := service.SettingKeyOpenAICodexTicketHarvestScope
+	h, repo := newStepUpSwitchTestHandler(t, map[string]string{})
+	reader := &ticketHarvestGroupReader{groups: map[int64]*service.Group{
+		2: {ID: 2, Platform: service.PlatformOpenAI},
+		3: {ID: 3, Platform: "grok"},
+	}}
+	h.settingService.SetDefaultSubscriptionGroupReader(reader)
+	rec := doUpdateSettings(t, h, map[string]any{key: map[string]any{
+		"mode": "selected", "group_ids": []int64{2, 2}, "account_policy": "schedulable_only",
+	}}, nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	scope, err := h.settingService.GetCodexTicketHarvestScope(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, []int64{2}, scope.GroupIDs)
+	saved := repo.values[key]
+	for _, id := range []int64{3, 999} {
+		rec = doUpdateSettings(t, h, map[string]any{key: map[string]any{
+			"mode": "selected", "group_ids": []int64{id}, "account_policy": "schedulable_only",
+		}}, nil)
+		require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+		require.Equal(t, saved, repo.values[key])
+	}
+	delete(reader.groups, 2)
+	rec = doUpdateSettings(t, h, map[string]any{"site_name": "preserve-deleted-selection"}, nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Equal(t, saved, repo.values[key])
+	get := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(get)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/settings", nil)
+	h.GetSettings(c)
+	require.Equal(t, http.StatusOK, get.Code)
+	var envelope struct {
+		Data struct {
+			Scope service.CodexTicketHarvestScope `json:"openai_codex_ticket_harvest_scope"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(get.Body.Bytes(), &envelope))
+	require.Equal(t, scope, envelope.Data.Scope)
+}
+
+func TestSettingsCodexTicketFailClosedDefaultsOffAndPersists(t *testing.T) {
+	key := service.SettingKeyOpenAICodexTicketFailClosed
+	h, repo := newStepUpSwitchTestHandler(t, map[string]string{})
+	require.False(t, h.settingService.GetOpenAICodexTicketFailClosed(context.Background()))
+
+	rec := doUpdateSettings(t, h, map[string]any{key: true}, nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Equal(t, "true", repo.values[key])
+	require.True(t, h.settingService.GetOpenAICodexTicketFailClosed(context.Background()))
+	require.Contains(t, rec.Body.String(), `"openai_codex_ticket_fail_closed":true`)
+
+	rec = doUpdateSettings(t, h, map[string]any{"site_name": "preserve-ticket-policy"}, nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "true", repo.values[key])
+
+	rec = doUpdateSettings(t, h, map[string]any{key: false}, nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "false", repo.values[key])
+	require.False(t, h.settingService.GetOpenAICodexTicketFailClosed(context.Background()))
+}

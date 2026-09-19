@@ -332,6 +332,65 @@ func (s *SettingService) InvalidateOpenAICodexTicketEnabledCache() {
 	s.openAICodexTicketEnabledCache.Store(&cachedOpenAICodexTicketEnabled{expiresAt: 0})
 }
 
+type cachedOpenAICodexTicketFailClosed struct {
+	value     bool
+	expiresAt int64
+}
+
+const openAICodexTicketFailClosedCacheTTL = 5 * time.Second
+
+// GetOpenAICodexTicketFailClosed returns the live scheduling policy. A missing
+// setting is deliberately fail-open: harvesting and injection continue, but a
+// missing ticket does not take an otherwise usable account out of rotation.
+func (s *SettingService) GetOpenAICodexTicketFailClosed(ctx context.Context) bool {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if ctx.Err() != nil || s == nil || s.settingRepo == nil {
+		return false
+	}
+	if cached, ok := s.openAICodexTicketFailClosedCache.Load().(*cachedOpenAICodexTicketFailClosed); ok && cached != nil && time.Now().UnixNano() < cached.expiresAt {
+		return cached.value
+	}
+	resultCh := s.openAICodexTicketFailClosedSF.DoChan(SettingKeyOpenAICodexTicketFailClosed, func() (any, error) {
+		dbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		value, err := s.settingRepo.GetValue(dbCtx, SettingKeyOpenAICodexTicketFailClosed)
+		if errors.Is(err, ErrSettingNotFound) {
+			value, err = "false", nil
+		}
+		if err != nil {
+			if cached, ok := s.openAICodexTicketFailClosedCache.Load().(*cachedOpenAICodexTicketFailClosed); ok && cached != nil {
+				return cached.value, nil
+			}
+			return false, nil
+		}
+		failClosed := strings.TrimSpace(value) == "true"
+		s.openAICodexTicketFailClosedCache.Store(&cachedOpenAICodexTicketFailClosed{
+			value:     failClosed,
+			expiresAt: time.Now().Add(openAICodexTicketFailClosedCacheTTL).UnixNano(),
+		})
+		return failClosed, nil
+	})
+	select {
+	case <-ctx.Done():
+		return false
+	case result := <-resultCh:
+		if value, ok := result.Val.(bool); ok && result.Err == nil {
+			return value
+		}
+		return false
+	}
+}
+
+func (s *SettingService) InvalidateOpenAICodexTicketFailClosedCache() {
+	if s == nil {
+		return
+	}
+	s.openAICodexTicketFailClosedSF.Forget(SettingKeyOpenAICodexTicketFailClosed)
+	s.openAICodexTicketFailClosedCache.Store(&cachedOpenAICodexTicketFailClosed{expiresAt: 0})
+}
+
 type cachedOpenAICodexTicketModels struct {
 	models     []string
 	configured bool
