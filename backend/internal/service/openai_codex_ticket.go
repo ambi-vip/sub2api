@@ -495,7 +495,7 @@ func (s *OpenAIGatewayService) ticketProbeCoolingDown(accountID int64, model str
 		return false
 	}
 	key := openAICodexTicketKey(accountID, model)
-	value, ok := s.openaiCodexTicketProbeCooldown.Load(key)
+	value, _ := s.openaiCodexTicketProbeCooldown.Load(key)
 	until, ok := value.(time.Time)
 	if !ok || !until.After(now) {
 		s.openaiCodexTicketProbeCooldown.Delete(key)
