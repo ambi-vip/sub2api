@@ -98,6 +98,13 @@ func TestCodexTicketSchedulerProjectedCandidate(t *testing.T) {
 }
 
 func TestCodexTicketSchedulerAdmissionSafety(t *testing.T) {
+	fixtureTicket := func(t *testing.T, a *Account) *openAICodexTicket {
+		t.Helper()
+		ticket, ok := a.Extra[openAICodexTicketExtraKey("gpt-6-astra")].(*openAICodexTicket)
+		require.True(t, ok, "fixture must contain a typed ticket")
+		require.NotNil(t, ticket)
+		return ticket
+	}
 	for _, advanced := range []bool{false, true} {
 		mode := "legacy"
 		if advanced {
@@ -105,35 +112,35 @@ func TestCodexTicketSchedulerAdmissionSafety(t *testing.T) {
 		}
 		for _, tc := range []struct {
 			name string
-			edit func(*OpenAIGatewayService, *Account)
+			edit func(*testing.T, *OpenAIGatewayService, *Account)
 			ok   bool
 		}{
-			{"missing", func(_ *OpenAIGatewayService, a *Account) { a.Extra = nil }, false},
-			{"expired", func(_ *OpenAIGatewayService, a *Account) {
-				a.Extra[openAICodexTicketExtraKey("gpt-6-astra")].(*openAICodexTicket).ExpiresAt = time.Now().Add(-time.Minute)
+			{"missing", func(_ *testing.T, _ *OpenAIGatewayService, a *Account) { a.Extra = nil }, false},
+			{"expired", func(t *testing.T, _ *OpenAIGatewayService, a *Account) {
+				fixtureTicket(t, a).ExpiresAt = time.Now().Add(-time.Minute)
 			}, false},
-			{"changed_identity", func(_ *OpenAIGatewayService, a *Account) {
+			{"changed_identity", func(_ *testing.T, _ *OpenAIGatewayService, a *Account) {
 				a.Credentials["chatgpt_account_id"] = "changed-fixture"
 			}, false},
-			{"revoked_in_memory", func(s *OpenAIGatewayService, a *Account) {
-				tombstone := *a.Extra[openAICodexTicketExtraKey("gpt-6-astra")].(*openAICodexTicket)
+			{"revoked_in_memory", func(t *testing.T, s *OpenAIGatewayService, a *Account) {
+				tombstone := *fixtureTicket(t, a)
 				tombstone.Revoked = true
 				s.openaiCodexTickets.Store(openAICodexTicketKey(a.ID, "gpt-6-astra"), &tombstone)
 			}, false},
-			{"valid_standby", func(_ *OpenAIGatewayService, a *Account) {
-				ticket := a.Extra[openAICodexTicketExtraKey("gpt-6-astra")].(*openAICodexTicket)
+			{"valid_standby", func(t *testing.T, _ *OpenAIGatewayService, a *Account) {
+				ticket := fixtureTicket(t, a)
 				standby := *ticket
 				ticket.ExpiresAt = time.Now().Add(-time.Minute)
 				ticket.Standby = &standby
 			}, true},
-			{"stopped_after_snapshot", func(_ *OpenAIGatewayService, a *Account) { a.Schedulable = false }, false},
-			{"removed_group_after_snapshot", func(_ *OpenAIGatewayService, a *Account) { a.GroupIDs = nil }, false},
-			{"database_final_recheck_stopped", func(s *OpenAIGatewayService, a *Account) {
+			{"stopped_after_snapshot", func(_ *testing.T, _ *OpenAIGatewayService, a *Account) { a.Schedulable = false }, false},
+			{"removed_group_after_snapshot", func(_ *testing.T, _ *OpenAIGatewayService, a *Account) { a.GroupIDs = nil }, false},
+			{"database_final_recheck_stopped", func(_ *testing.T, s *OpenAIGatewayService, a *Account) {
 				latest := *a
 				latest.Schedulable = false
 				s.accountRepo = schedulerTestOpenAIAccountRepo{accounts: []Account{latest}}
 			}, false},
-			{"database_final_recheck_removed_group", func(s *OpenAIGatewayService, a *Account) {
+			{"database_final_recheck_removed_group", func(_ *testing.T, s *OpenAIGatewayService, a *Account) {
 				latest := *a
 				latest.GroupIDs = nil
 				s.accountRepo = schedulerTestOpenAIAccountRepo{accounts: []Account{latest}}
@@ -141,7 +148,7 @@ func TestCodexTicketSchedulerAdmissionSafety(t *testing.T) {
 		} {
 			t.Run(mode+"/"+tc.name, func(t *testing.T) {
 				svc, _, account, groupID := ticketSchedulerFixture(t, advanced, true)
-				tc.edit(svc, account)
+				tc.edit(t, svc, account)
 				result, _, err := svc.SelectAccountWithScheduler(context.Background(), &groupID, "", "",
 					"gpt-6-astra", nil, OpenAIUpstreamTransportAny, false)
 				if tc.ok {
