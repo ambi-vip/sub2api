@@ -259,6 +259,7 @@ type UpdateSettingsRequest struct {
 	OpenAICodexVersionAutoSyncEnabled      *bool     `json:"openai_codex_version_auto_sync_enabled"`
 	OpenAICodexTicketEnabled               *bool     `json:"openai_codex_ticket_enabled"`
 	OpenAICodexTicketHarvestProxyURL       string    `json:"openai_codex_ticket_harvest_proxy_url"`
+	OpenAICodexTicketHarvestScope          *service.CodexTicketHarvestScope `json:"openai_codex_ticket_harvest_scope"`
 	OpenAICodexTicketModels                *[]string `json:"openai_codex_ticket_models"`
 
 	// codex_cli_only 加固（global-only）
@@ -495,6 +496,10 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 	var req UpdateSettingsRequest
 	if err := c.ShouldBindBodyWith(&req, binding.JSON); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if req.OpenAICodexTicketHarvestScope != nil && req.OpenAICodexTicketHarvestScope.Mode == "" {
+		response.BadRequest(c, "harvest scope mode is required")
 		return
 	}
 	auditReq := settingsAuditRequest(req)
@@ -1784,6 +1789,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return next
 		}(),
+		OpenAICodexTicketHarvestScope: func() service.CodexTicketHarvestScope {
+			if req.OpenAICodexTicketHarvestScope != nil {
+				return *req.OpenAICodexTicketHarvestScope
+			}
+			return previousSettings.OpenAICodexTicketHarvestScope
+		}(),
 		OpenAICodexTicketModels: func() []string {
 			if req.OpenAICodexTicketModels != nil {
 				return service.NormalizeOpenAICodexTicketModels(*req.OpenAICodexTicketModels)
@@ -2335,6 +2346,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		OpenAICodexTicketEnabled:                               updatedSettings.OpenAICodexTicketEnabled,
 		OpenAICodexTicketHarvestProxyURL:                       service.MaskProxyURL(updatedSettings.OpenAICodexTicketHarvestProxyURL),
 		OpenAICodexTicketHarvestProxyConfigured:                strings.TrimSpace(updatedSettings.OpenAICodexTicketHarvestProxyURL) != "",
+		OpenAICodexTicketHarvestScope:                          updatedSettings.OpenAICodexTicketHarvestScope,
 		OpenAICodexTicketModels:                                updatedSettings.OpenAICodexTicketModels,
 		MinCodexVersion:                                        updatedSettings.MinCodexVersion,
 		MaxCodexVersion:                                        updatedSettings.MaxCodexVersion,

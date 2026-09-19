@@ -220,6 +220,7 @@ type SystemSettings struct {
 	OpenAICodexTicketEnabled                bool     `json:"openai_codex_ticket_enabled"`
 	OpenAICodexTicketHarvestProxyURL        string   `json:"openai_codex_ticket_harvest_proxy_url"`
 	OpenAICodexTicketHarvestProxyConfigured bool     `json:"openai_codex_ticket_harvest_proxy_configured"`
+	OpenAICodexTicketHarvestScope           service.CodexTicketHarvestScope `json:"openai_codex_ticket_harvest_scope"`
 	OpenAICodexTicketModels                 []string `json:"openai_codex_ticket_models"`
 
 	// codex_cli_only 加固

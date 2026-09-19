@@ -898,6 +898,13 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		result.OpenAICodexTicketEnabled = s.cfg.Gateway.OpenAICodexTicket.Enabled
 	}
 	result.OpenAICodexTicketHarvestProxyURL = strings.TrimSpace(settings[SettingKeyOpenAICodexTicketHarvestProxyURL])
+	harvestScope, harvestScopeErr := parseCodexTicketHarvestScope(settings[SettingKeyOpenAICodexTicketHarvestScope])
+	result.OpenAICodexTicketHarvestScope = harvestScope
+	if harvestScopeErr != nil {
+		result.OpenAICodexTicketHarvestScope = CodexTicketHarvestScope{
+			Mode: "selected", GroupIDs: []int64{}, AccountPolicy: CodexHarvestSchedulableOnly,
+		}
+	}
 	if raw, ok := settings[SettingKeyOpenAICodexTicketModels]; ok && strings.TrimSpace(raw) != "" {
 		var models []string
 		if err := json.Unmarshal([]byte(raw), &models); err == nil {
