@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/binary"
 	"io"
 	"net/http"
 	"strings"
@@ -15,6 +17,12 @@ import (
 )
 
 func fakeCodexTicketState(n int) string {
+	if n == 292 {
+		raw := make([]byte, 57+16*openAICodexTicketPersonalBlocks)
+		raw[0] = 0x80
+		binary.BigEndian.PutUint64(raw[1:9], uint64(time.Now().Unix()-60))
+		return base64.URLEncoding.EncodeToString(raw)
+	}
 	if n < len(openAICodexTicketStatePrefix) {
 		return strings.Repeat("A", n)
 	}
@@ -228,6 +236,7 @@ func TestHarvestOpenAICodexTicket_StopsAt292AndUsesHarvestProxy(t *testing.T) {
 
 	svc.probeOnceOpenAICodexTicket(context.Background(), account, "gpt-6-astra")
 	require.Nil(t, svc.lookupOpenAICodexTicket(account, "gpt-6-astra"))
+	svc.openaiCodexTicketProbeCooldown.Delete(openAICodexTicketKey(account.ID, "gpt-6-astra"))
 	svc.probeOnceOpenAICodexTicket(context.Background(), account, "gpt-6-astra")
 	ticket := svc.lookupOpenAICodexTicket(account, "gpt-6-astra")
 	require.NotNil(t, ticket)
@@ -272,6 +281,7 @@ func TestHarvestOpenAICodexTicket_HTTP503DoesNotAbortHunt(t *testing.T) {
 	account := ticketTestAccount(41)
 	svc.probeOnceOpenAICodexTicket(context.Background(), account, "gpt-6-astra")
 	require.Nil(t, svc.lookupOpenAICodexTicket(account, "gpt-6-astra"))
+	svc.openaiCodexTicketProbeCooldown.Delete(openAICodexTicketKey(account.ID, "gpt-6-astra"))
 	svc.probeOnceOpenAICodexTicket(context.Background(), account, "gpt-6-astra")
 	ticket := svc.lookupOpenAICodexTicket(account, "gpt-6-astra")
 	require.NotNil(t, ticket)
@@ -417,6 +427,15 @@ func TestOpenAICodexTicket_RequiresActualLengthAndExpiry(t *testing.T) {
 	ticket.State = fakeCodexTicketState(292)
 	ticket.ExpiresAt = time.Time{}
 	require.False(t, ticket.valid(time.Now(), 292))
+}
+
+func TestParseOpenAICodexTicketShape(t *testing.T) {
+	shape, err := parseOpenAICodexTicketShape(fakeCodexTicketState(292))
+	require.NoError(t, err)
+	require.Equal(t, openAICodexTicketPersonalBlocks, shape.Blocks)
+	require.False(t, shape.IssuedAt.IsZero())
+	_, err = parseOpenAICodexTicketShape(fakeCodexTicketState(312))
+	require.Error(t, err)
 }
 
 // /responses/compact 的出站模型被 Forward 改写为 gateway.openai_compact_model

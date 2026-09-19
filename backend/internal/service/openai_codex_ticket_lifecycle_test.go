@@ -177,7 +177,7 @@ func TestCodexTicketProbeClosesStreamWithoutDraining(t *testing.T) {
 	}})
 	_, _, err := svc.fireOpenAICodexTicketProbe(context.Background(), ticketTestAccount(41), "test-token", "gpt-6-astra", "", time.Second)
 	require.NoError(t, err)
-	require.Zero(t, body.reads)
+	require.Equal(t, 1, body.reads)
 	require.Equal(t, 1, body.closes)
 }
 
