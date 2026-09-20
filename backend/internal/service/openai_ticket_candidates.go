@@ -5,10 +5,9 @@ import (
 	"fmt"
 )
 
-// Ticket admission needs credentials and persisted tickets that sched:meta
-// deliberately omits. Hydrate only gated candidates, before TopK filtering;
-// looking solely at the metadata would reject even a valid warm-memory ticket
-// because its identity cannot match the stripped credentials.
+// Ticket admission needs persisted tickets that sched:meta deliberately omits.
+// Hydrate only gated candidates before TopK filtering so a valid account is not
+// rejected merely because the scheduling projection has no ticket payload.
 func (s *OpenAIGatewayService) listSchedulableAccountsForRequest(
 	ctx context.Context, groupID *int64, platform, requestedModel string,
 	requireCompact bool, excludedIDs map[int64]struct{},

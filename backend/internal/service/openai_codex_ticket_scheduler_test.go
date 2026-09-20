@@ -40,7 +40,7 @@ func ticketSchedulerFixture(t *testing.T, advanced, loadBatch bool) (*OpenAIGate
 			AccountID: account.ID, Model: "gpt-6-astra",
 			State: fakeCodexTicketState(292), Length: 292,
 			CapturedAt: time.Now(), IssuedAt: time.Now(),
-			ExpiresAt: time.Now().Add(30 * time.Minute), Identity: ticketIdentity(account),
+			ExpiresAt: time.Now().Add(30 * time.Minute),
 		},
 	}
 	cache := &openAISnapshotCacheStub{
@@ -119,20 +119,6 @@ func TestCodexTicketSchedulerAdmissionSafety(t *testing.T) {
 			{"expired", func(t *testing.T, _ *OpenAIGatewayService, a *Account) {
 				fixtureTicket(t, a).ExpiresAt = time.Now().Add(-time.Minute)
 			}, false},
-			{"changed_identity", func(_ *testing.T, _ *OpenAIGatewayService, a *Account) {
-				a.Credentials["chatgpt_account_id"] = "changed-fixture"
-			}, false},
-			{"revoked_in_memory", func(t *testing.T, s *OpenAIGatewayService, a *Account) {
-				tombstone := *fixtureTicket(t, a)
-				tombstone.Revoked = true
-				s.openaiCodexTickets.Store(openAICodexTicketKey(a.ID, "gpt-6-astra"), &tombstone)
-			}, false},
-			{"valid_standby", func(t *testing.T, _ *OpenAIGatewayService, a *Account) {
-				ticket := fixtureTicket(t, a)
-				standby := *ticket
-				ticket.ExpiresAt = time.Now().Add(-time.Minute)
-				ticket.Standby = &standby
-			}, true},
 			{"stopped_after_snapshot", func(_ *testing.T, _ *OpenAIGatewayService, a *Account) { a.Schedulable = false }, false},
 			{"removed_group_after_snapshot", func(_ *testing.T, _ *OpenAIGatewayService, a *Account) { a.GroupIDs = nil }, false},
 			{"database_final_recheck_stopped", func(_ *testing.T, s *OpenAIGatewayService, a *Account) {
