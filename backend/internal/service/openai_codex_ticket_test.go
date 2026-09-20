@@ -467,3 +467,65 @@ func TestOpenAICodexTicketGate_CompactRequestUsesForwardOutboundModel(t *testing
 	// 回归锚点：按客户端原始模型判定（旧实现的口径）在 compact 下必然误拦。
 	require.True(t, svc.openAICodexTicketBlocksAccount(account, canonicalOpenAIAccountSchedulingModel(account, "gpt-6-astra")))
 }
+
+// TestOpenAICodexTicketExpectedBlocksByPlanType 锁定 plan_type → 票据形态的判定口径。
+// 上游并不只上报 "team"：商务自助订阅会上报 "self_serve_business_prolite" 这类变体，
+// 等值判定会把它错判为个人号，导致上游返回的 12 块 / 332 门票被判为 probe miss。
+func TestOpenAICodexTicketExpectedBlocksByPlanType(t *testing.T) {
+	cases := []struct {
+		plan string
+		want int
+	}{
+		{"", openAICodexTicketPersonalBlocks},
+		{"plus", openAICodexTicketPersonalBlocks},
+		{"pro", openAICodexTicketPersonalBlocks},
+		{"k12", openAICodexTicketPersonalBlocks},
+		{"free", openAICodexTicketPersonalBlocks},
+		{"team", openAICodexTicketTeamBlocks},
+		{"business", openAICodexTicketTeamBlocks},
+		{"enterprise", openAICodexTicketTeamBlocks},
+		{"self_serve_business_prolite", openAICodexTicketTeamBlocks},
+		{"self_serve_business_usage_based", openAICodexTicketTeamBlocks},
+		{"SELF_SERVE_BUSINESS_PRO", openAICodexTicketTeamBlocks},
+		{" Team ", openAICodexTicketTeamBlocks},
+	}
+
+	for _, tc := range cases {
+		account := ticketTestAccount(1)
+		if tc.plan != "" {
+			account.Credentials["plan_type"] = tc.plan
+		}
+		require.Equal(t, tc.want, openAICodexTicketExpectedBlocks(account), "plan_type=%q", tc.plan)
+	}
+}
+
+// TestOpenAICodexTicketExpectedLengthTeamVariant 验证 12 块换算出的目标长度是 332，
+// 个人号仍是 292；这是探针校验与票据有效性判定共用的口径。
+func TestOpenAICodexTicketExpectedLengthTeamVariant(t *testing.T) {
+	personal := ticketTestAccount(1)
+	personal.Credentials["plan_type"] = "plus"
+	require.Equal(t, 292, openAICodexTicketExpectedLength(personal))
+	require.Equal(t, openAICodexTicketPersonalBlocks, openAICodexTicketExpectedBlocks(personal))
+
+	team := ticketTestAccount(2)
+	team.Credentials["plan_type"] = "self_serve_business_prolite"
+	require.Equal(t, 332, openAICodexTicketExpectedLength(team))
+	require.Equal(t, openAICodexTicketTeamBlocks, openAICodexTicketExpectedBlocks(team))
+
+	// 332 与 12 块必须自洽（57 字节信封 + 16 字节/块，base64 后取整）。
+	require.Equal(t, base64.URLEncoding.EncodedLen(57+16*openAICodexTicketTeamBlocks), openAICodexTicketExpectedLength(team))
+}
+
+// TestOpenAICodexTicketTeamVariantAccepts332Probe 回归：商务变体账号在探针拿到
+// 12 块 / 332 时必须被判为命中（修复前会被 expectedBlocks=10 / expectedLength=292 打回）。
+func TestOpenAICodexTicketTeamVariantAccepts332Probe(t *testing.T) {
+	account := ticketTestAccount(7)
+	account.Credentials["plan_type"] = "self_serve_business_prolite"
+
+	state := fakeCodexTicketState(332)
+	shape, err := parseOpenAICodexTicketShape(state)
+	require.NoError(t, err)
+	require.Equal(t, openAICodexTicketTeamBlocks, shape.Blocks)
+	require.Equal(t, openAICodexTicketExpectedBlocks(account), shape.Blocks)
+	require.Equal(t, openAICodexTicketExpectedLength(account), len(state))
+}

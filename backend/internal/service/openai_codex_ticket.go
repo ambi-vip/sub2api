@@ -76,12 +76,31 @@ func parseOpenAICodexTicketShape(value string) (openAICodexTicketShape, error) {
 	return openAICodexTicketShape{Blocks: (len(raw) - 57) / 16, IssuedAt: time.Unix(int64(issuedUnix), 0)}, nil
 }
 
-func openAICodexTicketExpectedBlocks(account *Account) int {
-	if account != nil {
-		switch strings.ToLower(strings.TrimSpace(account.GetCredential("plan_type"))) {
-		case "team", "business":
-			return openAICodexTicketTeamBlocks
+// openAICodexTicketTeamPlanMarkers identify ChatGPT Team/Business/Enterprise
+// subscriptions. Upstream does not report a single canonical plan_type: besides
+// "team" it also emits variants such as "self_serve_business_prolite", so these
+// plans are detected by substring instead of equality.
+var openAICodexTicketTeamPlanMarkers = []string{"team", "business", "enterprise"}
+
+func openAICodexTicketIsTeamPlan(account *Account) bool {
+	if account == nil {
+		return false
+	}
+	plan := strings.ToLower(strings.TrimSpace(account.GetCredential("plan_type")))
+	if plan == "" {
+		return false
+	}
+	for _, marker := range openAICodexTicketTeamPlanMarkers {
+		if strings.Contains(plan, marker) {
+			return true
 		}
+	}
+	return false
+}
+
+func openAICodexTicketExpectedBlocks(account *Account) int {
+	if openAICodexTicketIsTeamPlan(account) {
+		return openAICodexTicketTeamBlocks
 	}
 	return openAICodexTicketPersonalBlocks
 }
