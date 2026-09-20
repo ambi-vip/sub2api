@@ -539,6 +539,12 @@ export default {
         codexTicketEnabled: '292 打票',
         codexTicketEnabledDesc:
           '关闭后不打票、不注入 x-codex-turn-state，按原链路转发。开启后后台打票，并在业务请求中覆盖该头。',
+        codexTicketFailClosed: '无票时暂停账号',
+        codexTicketFailClosedDesc:
+          '默认关闭。关闭时，票据缺失、过期或形态不匹配只影响注入，账号仍可正常调度；开启后，无有效票据的目标模型账号会暂停调度。',
+        codexTicketModels: '打票模型',
+        codexTicketModelsDesc: '只对勾选的模型打票和注入；取消勾选后该模型按原链路转发。',
+        codexTicketShapeNotice: '292/332 仅表示观测到的 state 形态，不代表模型质量。系统只注入符合当前校验规则的票据；关闭「无票时暂停账号」后，形态不匹配不会阻断请求。',
         codexTicketHarvestProxy: '292 打票代理',
         codexTicketHarvestProxyDesc:
           '仅在门票功能开启时用于打票，保存后后续探测会使用新代理，无需重启。日常业务仍走账号自己的住宅代理。填写完整代理 URL（http 或 socks5h，含用户名和密码）。代理服务商需自行负责出口 IP 轮换。留空并保存表示不改已保存的值。',

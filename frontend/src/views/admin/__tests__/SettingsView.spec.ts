@@ -735,6 +735,100 @@ describe("admin SettingsView payment visible method controls", () => {
     wrapper.unmount();
   });
 
+  it("loads and saves independent Codex ticket model toggles", async () => {
+    getSettings.mockResolvedValueOnce({
+      ...baseSettingsResponse,
+      openai_codex_ticket_models: ["gpt-6-astra", "gpt-5.6-sol"],
+    });
+    const wrapper = mountView();
+    await flushPromises();
+    await wrapper.get("#codex-ticket-model-sol").setValue(false);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings.mock.calls[0]?.[0].openai_codex_ticket_models).toEqual([
+      "gpt-6-astra",
+    ]);
+    wrapper.unmount();
+  });
+
+  it("keeps missing-ticket account pausing off by default and saves explicit opt-in", async () => {
+    getSettings.mockResolvedValueOnce({
+      ...baseSettingsResponse,
+      openai_codex_ticket_fail_closed: false,
+    });
+    const wrapper = mountView();
+    await flushPromises();
+    const toggle = wrapper.get<HTMLInputElement>("#codex-ticket-fail-closed");
+    expect(toggle.element.checked).toBe(false);
+    await toggle.setValue(true);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings.mock.calls[0]?.[0].openai_codex_ticket_fail_closed).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("loads and saves selected harvest groups, preserving an explicitly empty selection", async () => {
+    getSettings.mockResolvedValueOnce({ ...baseSettingsResponse,
+      openai_codex_ticket_harvest_scope: { mode: "selected", group_ids: [2], account_policy: "schedulable_only" },
+    });
+    getGroups.mockResolvedValueOnce([
+      { id: 2, name: "PLUS", platform: "openai", status: "active" },
+      { id: 24, name: "PRO", platform: "openai", status: "active" },
+      { id: 32, name: "Grok", platform: "grok", status: "active" },
+    ]);
+    const wrapper = mountView();
+    await flushPromises();
+    expect(wrapper.find("#codex-ticket-group-32").exists()).toBe(false);
+    expect(wrapper.get<HTMLInputElement>("#codex-ticket-group-2").element.checked).toBe(true);
+    await wrapper.get("#codex-ticket-group-24").setValue(true);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings.mock.calls[0]?.[0].openai_codex_ticket_harvest_scope).toEqual({
+      mode: "selected", group_ids: [2, 24], account_policy: "schedulable_only",
+    });
+    await wrapper.get("#codex-ticket-group-2").setValue(false);
+    await wrapper.get("#codex-ticket-group-24").setValue(false);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings.mock.calls[1]?.[0].openai_codex_ticket_harvest_scope).toEqual({
+      mode: "selected", group_ids: [], account_policy: "schedulable_only",
+    });
+    wrapper.unmount();
+  });
+
+  it("preserves selected harvest IDs when group loading fails", async () => {
+    getSettings.mockResolvedValueOnce({ ...baseSettingsResponse,
+      openai_codex_ticket_harvest_scope: { mode: "selected", group_ids: [24], account_policy: "schedulable_only" },
+    });
+    getGroups.mockRejectedValueOnce(new Error("offline"));
+    const wrapper = mountView();
+    await flushPromises();
+    expect(wrapper.get<HTMLInputElement>("#codex-ticket-group-24").element.checked).toBe(true);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings.mock.calls[0]?.[0].openai_codex_ticket_harvest_scope).toEqual({
+      mode: "selected", group_ids: [24], account_policy: "schedulable_only",
+    });
+    wrapper.unmount();
+  });
+
+  it("defaults legacy harvest scopes to schedulable only and saves compatibility policy", async () => {
+    getSettings.mockResolvedValueOnce({ ...baseSettingsResponse,
+      openai_codex_ticket_harvest_scope: { mode: "selected", group_ids: [24] },
+    });
+    const wrapper = mountView();
+    await flushPromises();
+    const policy = wrapper.get<HTMLSelectElement>("#codex-ticket-account-policy");
+    expect(policy.element.value).toBe("schedulable_only");
+    await policy.setValue("prioritize_schedulable");
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings.mock.calls[0]?.[0].openai_codex_ticket_harvest_scope).toEqual({
+      mode: "selected", group_ids: [24], account_policy: "prioritize_schedulable",
+    });
+    wrapper.unmount();
+  });
+
   it("loads the masked Codex harvest proxy and submits a replacement URL", async () => {
     getSettings.mockResolvedValueOnce({
       ...baseSettingsResponse,

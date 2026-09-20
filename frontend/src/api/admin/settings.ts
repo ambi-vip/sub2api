@@ -640,8 +640,11 @@ export interface SystemSettings {
   openai_codex_client_version_synced: string;
   openai_codex_version_auto_sync_enabled: boolean;
   openai_codex_ticket_enabled: boolean;
+  openai_codex_ticket_fail_closed: boolean;
+  openai_codex_ticket_harvest_scope?: { mode: 'all' | 'selected'; group_ids: number[]; account_policy: 'schedulable_only' | 'prioritize_schedulable' };
   openai_codex_ticket_harvest_proxy_url: string;
   openai_codex_ticket_harvest_proxy_configured: boolean;
+  openai_codex_ticket_models: string[];
   // codex_cli_only 加固
   min_codex_version: string;
   max_codex_version: string;
@@ -962,7 +965,10 @@ export interface UpdateSettingsRequest {
   openai_codex_client_version?: string;
   openai_codex_version_auto_sync_enabled?: boolean;
   openai_codex_ticket_enabled?: boolean;
+  openai_codex_ticket_fail_closed?: boolean;
+  openai_codex_ticket_harvest_scope?: { mode: 'all' | 'selected'; group_ids: number[]; account_policy: 'schedulable_only' | 'prioritize_schedulable' };
   openai_codex_ticket_harvest_proxy_url?: string;
+  openai_codex_ticket_models?: string[];
   // codex_cli_only 加固
   min_codex_version?: string;
   max_codex_version?: string;
