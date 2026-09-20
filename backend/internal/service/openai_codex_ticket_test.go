@@ -17,8 +17,12 @@ import (
 )
 
 func fakeCodexTicketState(n int) string {
-	if n == 292 {
-		raw := make([]byte, 57+16*openAICodexTicketPersonalBlocks)
+	if n == 292 || n == 332 {
+		blocks := openAICodexTicketPersonalBlocks
+		if n == 332 {
+			blocks = openAICodexTicketTeamBlocks
+		}
+		raw := make([]byte, 57+16*blocks)
 		raw[0] = 0x80
 		binary.BigEndian.PutUint64(raw[1:9], uint64(time.Now().Unix()-60))
 		return base64.URLEncoding.EncodeToString(raw)
@@ -528,4 +532,30 @@ func TestOpenAICodexTicketTeamVariantAccepts332Probe(t *testing.T) {
 	require.Equal(t, openAICodexTicketTeamBlocks, shape.Blocks)
 	require.Equal(t, openAICodexTicketExpectedBlocks(account), shape.Blocks)
 	require.Equal(t, openAICodexTicketExpectedLength(account), len(state))
+
+	header := http.Header{}
+	header.Set(openAICodexTurnStateHeader, state)
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{{
+		StatusCode: http.StatusOK,
+		Header:     header,
+		Body:       io.NopCloser(strings.NewReader(`{"status":"completed"}`)),
+	}}}
+	svc := ticketTestService(t, config.OpenAICodexTicketConfig{
+		Enabled:                      true,
+		TargetLength:                 292,
+		TTLSeconds:                   3600,
+		HarvestProxyURL:              "socks5h://harvest.example:31",
+		HarvestAttemptTimeoutSeconds: 5,
+		FailClosed:                   true,
+	}, upstream)
+	svc.probeOnceOpenAICodexTicket(context.Background(), account, "gpt-6-astra")
+	ticket := svc.lookupOpenAICodexTicket(account, "gpt-6-astra")
+	require.NotNil(t, ticket)
+	require.Equal(t, state, ticket.State)
+	require.Equal(t, openAICodexTicketTeamBlocks, ticket.Blocks)
+
+	outbound := http.Header{}
+	require.NoError(t, svc.applyOpenAICodexTicket(context.Background(), account, "gpt-6-astra", outbound))
+	require.Equal(t, state, outbound.Get(openAICodexTurnStateHeader))
+	require.Len(t, upstream.requests, 1)
 }
