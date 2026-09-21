@@ -665,8 +665,17 @@ func (s *PaymentService) hasAuditLog(ctx context.Context, orderID int64, action 
 }
 
 func (s *PaymentService) applyAffiliateRebateForOrder(ctx context.Context, o *dbent.PaymentOrder) error {
-	baseAmount := affiliateRebateBaseAmount(o)
-	if o == nil || baseAmount <= 0 {
+	if o == nil {
+		return nil
+	}
+	baseAmount, rebateMultiplier, err := s.affiliateRebateBaseAmount(ctx, o)
+	if err != nil {
+		s.writeAuditLog(ctx, o.ID, "AFFILIATE_REBATE_FAILED", "system", map[string]any{
+			"error": err.Error(),
+		})
+		return err
+	}
+	if baseAmount <= 0 {
 		return nil
 	}
 	if s.affiliateService == nil {
@@ -706,6 +715,7 @@ func (s *PaymentService) applyAffiliateRebateForOrder(ctx context.Context, o *db
 	if rebateAmount <= 0 {
 		if err := s.updateClaimedAffiliateRebateAudit(txCtx, tx.Client(), o.ID, "AFFILIATE_REBATE_SKIPPED", map[string]any{
 			"baseAmount": baseAmount,
+			"multiplier": rebateMultiplier,
 			"reason":     "no inviter bound or rebate amount <= 0",
 		}); err != nil {
 			s.writeAuditLog(ctx, o.ID, "AFFILIATE_REBATE_FAILED", "system", map[string]any{
@@ -724,6 +734,7 @@ func (s *PaymentService) applyAffiliateRebateForOrder(ctx context.Context, o *db
 
 	if err := s.updateClaimedAffiliateRebateAudit(txCtx, tx.Client(), o.ID, "AFFILIATE_REBATE_APPLIED", map[string]any{
 		"baseAmount":   baseAmount,
+		"multiplier":   rebateMultiplier,
 		"rebateAmount": rebateAmount,
 	}); err != nil {
 		s.writeAuditLog(ctx, o.ID, "AFFILIATE_REBATE_FAILED", "system", map[string]any{
@@ -741,15 +752,28 @@ func (s *PaymentService) applyAffiliateRebateForOrder(ctx context.Context, o *db
 	return nil
 }
 
-func affiliateRebateBaseAmount(o *dbent.PaymentOrder) float64 {
+// affiliateRebateBaseAmount 返回订单的邀请返利基数与实际采用的充值倍率。
+// 余额订单的 o.Amount 在下单时已按充值倍率折算为到账金额，直接作为基数；
+// 订阅订单的 o.Amount 是套餐原价，需按站点充值倍率折算，与余额充值保持同一口径。
+func (s *PaymentService) affiliateRebateBaseAmount(ctx context.Context, o *dbent.PaymentOrder) (float64, float64, error) {
 	if o == nil {
-		return 0
+		return 0, defaultBalanceRechargeMultiplier, nil
 	}
 	switch o.OrderType {
-	case payment.OrderTypeBalance, payment.OrderTypeSubscription:
-		return o.Amount
+	case payment.OrderTypeBalance:
+		return o.Amount, defaultBalanceRechargeMultiplier, nil
+	case payment.OrderTypeSubscription:
+		multiplier := defaultBalanceRechargeMultiplier
+		if s.configService != nil {
+			cfg, err := s.configService.GetPaymentConfig(ctx)
+			if err != nil {
+				return 0, 0, fmt.Errorf("get payment config for affiliate rebate: %w", err)
+			}
+			multiplier = cfg.BalanceRechargeMultiplier
+		}
+		return calculateCreditedBalance(o.Amount, multiplier), multiplier, nil
 	default:
-		return 0
+		return 0, defaultBalanceRechargeMultiplier, nil
 	}
 }
 

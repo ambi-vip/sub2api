@@ -1162,6 +1162,207 @@ func TestExecuteSubscriptionFulfillmentAppliesAffiliateRebate(t *testing.T) {
 			CreatedAt: time.Now().Add(-48 * time.Hour),
 		},
 	}
+	settingRepo := &paymentFulfillmentSettingRepoStub{values: map[string]string{
+		SettingKeyAffiliateEnabled:           "true",
+		SettingKeyAffiliateRebateRate:        "15",
+		SettingKeyAffiliateRebateFreezeHours: "0",
+		SettingBalanceRechargeMult:           "10",
+	}}
+	settingSvc := NewSettingService(settingRepo, nil)
+	subRepo := newSubscriptionUserSubRepoStub()
+	subscriptionSvc := NewSubscriptionService(&subscriptionGroupRepoStub{
+		group: &Group{ID: 7, Status: payment.EntityStatusActive, SubscriptionType: SubscriptionTypeSubscription},
+	}, subRepo, nil, nil, nil)
+	svc := &PaymentService{
+		entClient:        client,
+		groupRepo:        &subscriptionGroupRepoStub{group: &Group{ID: 7, Status: payment.EntityStatusActive, SubscriptionType: SubscriptionTypeSubscription}},
+		subscriptionSvc:  subscriptionSvc,
+		configService:    NewPaymentConfigService(client, settingRepo, nil),
+		affiliateService: NewAffiliateService(affiliateRepo, settingSvc, nil, nil),
+	}
+
+	err = svc.ExecuteSubscriptionFulfillment(ctx, order.ID)
+	require.NoError(t, err)
+
+	reloaded, err := client.PaymentOrder.Get(ctx, order.ID)
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusCompleted, reloaded.Status)
+	require.Len(t, affiliateRepo.accrueCalls, 1)
+	require.Equal(t, inviterID, affiliateRepo.accrueCalls[0].inviterID)
+	require.Equal(t, user.ID, affiliateRepo.accrueCalls[0].inviteeUserID)
+	require.InDelta(t, 14.985, affiliateRepo.accrueCalls[0].amount, 0.00000001)
+	require.NotNil(t, affiliateRepo.accrueCalls[0].sourceOrderID)
+	require.Equal(t, order.ID, *affiliateRepo.accrueCalls[0].sourceOrderID)
+	require.Equal(t, 1, subRepo.createCalls)
+
+	applied, err := client.PaymentAuditLog.Query().
+		Where(paymentauditlog.OrderIDEQ(strconv.FormatInt(order.ID, 10)), paymentauditlog.ActionEQ("AFFILIATE_REBATE_APPLIED")).
+		Only(ctx)
+	require.NoError(t, err)
+	require.Contains(t, applied.Detail, `"baseAmount":99.9`)
+	require.Contains(t, applied.Detail, `"multiplier":10`)
+	require.Contains(t, applied.Detail, `"rebateAmount":14.985`)
+}
+
+func TestExecuteSubscriptionFulfillmentAffiliateRebateDefaultsToUnitMultiplier(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	ensurePaymentAuditOrderActionUniqueIndex(t, ctx, client)
+
+	user, err := client.User.Create().
+		SetEmail("subscription-affiliate-defmult@example.com").
+		SetPasswordHash("hash").
+		SetUsername("subscription-affiliate-defmult-user").
+		Save(ctx)
+	require.NoError(t, err)
+
+	order, err := client.PaymentOrder.Create().
+		SetUserID(user.ID).
+		SetUserEmail(user.Email).
+		SetUserName(user.Username).
+		SetAmount(9.99).
+		SetPayAmount(71.36).
+		SetFeeRate(0).
+		SetRechargeCode("PAY-SUB-AFFILIATE-DEFMULT").
+		SetOutTradeNo("sub2_subscription_affiliate_defmult").
+		SetPaymentType(payment.TypeAlipay).
+		SetPaymentTradeNo("trade-sub-affiliate-defmult").
+		SetOrderType(payment.OrderTypeSubscription).
+		SetPlanID(101).
+		SetSubscriptionGroupID(7).
+		SetSubscriptionDays(30).
+		SetStatus(OrderStatusPaid).
+		SetExpiresAt(time.Now().Add(time.Hour)).
+		SetClientIP("127.0.0.1").
+		SetSrcHost("api.example.com").
+		Save(ctx)
+	require.NoError(t, err)
+
+	inviterID := int64(9001)
+	affiliateRepo := &paymentFulfillmentAffiliateRepoStub{
+		inviteeSummary: &AffiliateSummary{
+			UserID:    user.ID,
+			AffCode:   "INVITEE",
+			InviterID: &inviterID,
+			CreatedAt: time.Now().Add(-24 * time.Hour),
+		},
+		inviterSummary: &AffiliateSummary{
+			UserID:    inviterID,
+			AffCode:   "INVITER",
+			CreatedAt: time.Now().Add(-48 * time.Hour),
+		},
+	}
+	settingRepo := &paymentFulfillmentSettingRepoStub{values: map[string]string{
+		SettingKeyAffiliateEnabled:           "true",
+		SettingKeyAffiliateRebateRate:        "15",
+		SettingKeyAffiliateRebateFreezeHours: "0",
+	}}
+	settingSvc := NewSettingService(settingRepo, nil)
+	subRepo := newSubscriptionUserSubRepoStub()
+	subscriptionSvc := NewSubscriptionService(&subscriptionGroupRepoStub{
+		group: &Group{ID: 7, Status: payment.EntityStatusActive, SubscriptionType: SubscriptionTypeSubscription},
+	}, subRepo, nil, nil, nil)
+	svc := &PaymentService{
+		entClient:        client,
+		groupRepo:        &subscriptionGroupRepoStub{group: &Group{ID: 7, Status: payment.EntityStatusActive, SubscriptionType: SubscriptionTypeSubscription}},
+		subscriptionSvc:  subscriptionSvc,
+		configService:    NewPaymentConfigService(client, settingRepo, nil),
+		affiliateService: NewAffiliateService(affiliateRepo, settingSvc, nil, nil),
+	}
+
+	err = svc.ExecuteSubscriptionFulfillment(ctx, order.ID)
+	require.NoError(t, err)
+
+	reloaded, err := client.PaymentOrder.Get(ctx, order.ID)
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusCompleted, reloaded.Status)
+	require.Len(t, affiliateRepo.accrueCalls, 1)
+	require.InDelta(t, 1.4985, affiliateRepo.accrueCalls[0].amount, 0.00000001)
+
+	applied, err := client.PaymentAuditLog.Query().
+		Where(paymentauditlog.OrderIDEQ(strconv.FormatInt(order.ID, 10)), paymentauditlog.ActionEQ("AFFILIATE_REBATE_APPLIED")).
+		Only(ctx)
+	require.NoError(t, err)
+	require.Contains(t, applied.Detail, `"baseAmount":9.99`)
+	require.Contains(t, applied.Detail, `"multiplier":1`)
+	require.Contains(t, applied.Detail, `"rebateAmount":1.4985`)
+}
+
+type paymentFulfillmentFailingSettingRepo struct{}
+
+func (s *paymentFulfillmentFailingSettingRepo) Get(context.Context, string) (*Setting, error) {
+	return nil, ErrSettingNotFound
+}
+
+func (s *paymentFulfillmentFailingSettingRepo) GetValue(context.Context, string) (string, error) {
+	return "", ErrSettingNotFound
+}
+
+func (s *paymentFulfillmentFailingSettingRepo) Set(context.Context, string, string) error { return nil }
+
+func (s *paymentFulfillmentFailingSettingRepo) GetMultiple(context.Context, []string) (map[string]string, error) {
+	return nil, errors.New("db unavailable")
+}
+
+func (s *paymentFulfillmentFailingSettingRepo) SetMultiple(context.Context, map[string]string) error {
+	return nil
+}
+
+func (s *paymentFulfillmentFailingSettingRepo) GetAll(context.Context) (map[string]string, error) {
+	return nil, errors.New("db unavailable")
+}
+
+func (s *paymentFulfillmentFailingSettingRepo) Delete(context.Context, string) error { return nil }
+
+func TestExecuteSubscriptionFulfillmentAffiliateRebateConfigFailureIsRetryable(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	ensurePaymentAuditOrderActionUniqueIndex(t, ctx, client)
+
+	user, err := client.User.Create().
+		SetEmail("subscription-affiliate-cfgfail@example.com").
+		SetPasswordHash("hash").
+		SetUsername("subscription-affiliate-cfgfail-user").
+		Save(ctx)
+	require.NoError(t, err)
+
+	order, err := client.PaymentOrder.Create().
+		SetUserID(user.ID).
+		SetUserEmail(user.Email).
+		SetUserName(user.Username).
+		SetAmount(80).
+		SetPayAmount(80).
+		SetFeeRate(0).
+		SetRechargeCode("PAY-SUB-AFFILIATE-CFGFAIL").
+		SetOutTradeNo("sub2_subscription_affiliate_cfgfail").
+		SetPaymentType(payment.TypeAlipay).
+		SetPaymentTradeNo("trade-sub-affiliate-cfgfail").
+		SetOrderType(payment.OrderTypeSubscription).
+		SetPlanID(102).
+		SetSubscriptionGroupID(7).
+		SetSubscriptionDays(30).
+		SetStatus(OrderStatusPaid).
+		SetPaidAt(time.Now()).
+		SetExpiresAt(time.Now().Add(time.Hour)).
+		SetClientIP("127.0.0.1").
+		SetSrcHost("api.example.com").
+		Save(ctx)
+	require.NoError(t, err)
+
+	inviterID := int64(9001)
+	affiliateRepo := &paymentFulfillmentAffiliateRepoStub{
+		inviteeSummary: &AffiliateSummary{
+			UserID:    user.ID,
+			AffCode:   "INVITEE",
+			InviterID: &inviterID,
+			CreatedAt: time.Now().Add(-24 * time.Hour),
+		},
+		inviterSummary: &AffiliateSummary{
+			UserID:    inviterID,
+			AffCode:   "INVITER",
+			CreatedAt: time.Now().Add(-48 * time.Hour),
+		},
+	}
 	settingSvc := NewSettingService(&paymentFulfillmentSettingRepoStub{values: map[string]string{
 		SettingKeyAffiliateEnabled:           "true",
 		SettingKeyAffiliateRebateRate:        "15",
@@ -1175,29 +1376,98 @@ func TestExecuteSubscriptionFulfillmentAppliesAffiliateRebate(t *testing.T) {
 		entClient:        client,
 		groupRepo:        &subscriptionGroupRepoStub{group: &Group{ID: 7, Status: payment.EntityStatusActive, SubscriptionType: SubscriptionTypeSubscription}},
 		subscriptionSvc:  subscriptionSvc,
+		configService:    NewPaymentConfigService(client, &paymentFulfillmentFailingSettingRepo{}, nil),
 		affiliateService: NewAffiliateService(affiliateRepo, settingSvc, nil, nil),
 	}
 
 	err = svc.ExecuteSubscriptionFulfillment(ctx, order.ID)
+	require.Error(t, err)
+
+	failed, err := client.PaymentOrder.Get(ctx, order.ID)
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusFailed, failed.Status)
+	require.Empty(t, affiliateRepo.accrueCalls)
+
+	failedAuditCount, err := client.PaymentAuditLog.Query().
+		Where(paymentauditlog.OrderIDEQ(strconv.FormatInt(order.ID, 10)), paymentauditlog.ActionEQ("AFFILIATE_REBATE_FAILED")).
+		Count(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, failedAuditCount)
+
+	svc.configService = NewPaymentConfigService(client, &paymentFulfillmentSettingRepoStub{values: map[string]string{
+		SettingBalanceRechargeMult: "10",
+	}}, nil)
+	err = svc.RetryFulfillment(ctx, order.ID)
 	require.NoError(t, err)
 
 	reloaded, err := client.PaymentOrder.Get(ctx, order.ID)
 	require.NoError(t, err)
 	require.Equal(t, OrderStatusCompleted, reloaded.Status)
 	require.Len(t, affiliateRepo.accrueCalls, 1)
-	require.Equal(t, inviterID, affiliateRepo.accrueCalls[0].inviterID)
-	require.Equal(t, user.ID, affiliateRepo.accrueCalls[0].inviteeUserID)
-	require.InDelta(t, 1.4985, affiliateRepo.accrueCalls[0].amount, 0.00000001)
-	require.NotNil(t, affiliateRepo.accrueCalls[0].sourceOrderID)
-	require.Equal(t, order.ID, *affiliateRepo.accrueCalls[0].sourceOrderID)
-	require.Equal(t, 1, subRepo.createCalls)
+	require.InDelta(t, 120, affiliateRepo.accrueCalls[0].amount, 0.00000001)
 
 	applied, err := client.PaymentAuditLog.Query().
 		Where(paymentauditlog.OrderIDEQ(strconv.FormatInt(order.ID, 10)), paymentauditlog.ActionEQ("AFFILIATE_REBATE_APPLIED")).
 		Only(ctx)
 	require.NoError(t, err)
-	require.Contains(t, applied.Detail, `"baseAmount":9.99`)
-	require.Contains(t, applied.Detail, `"rebateAmount":1.4985`)
+	require.Contains(t, applied.Detail, `"baseAmount":800`)
+	require.Contains(t, applied.Detail, `"multiplier":10`)
+	require.Contains(t, applied.Detail, `"rebateAmount":120`)
+}
+
+func TestAffiliateRebateBaseAmount(t *testing.T) {
+	ctx := context.Background()
+	balanceOrder := &dbent.PaymentOrder{OrderType: payment.OrderTypeBalance, Amount: 88}
+	subscriptionOrder := &dbent.PaymentOrder{OrderType: payment.OrderTypeSubscription, Amount: 9.99}
+
+	t.Run("balance order keeps credited amount", func(t *testing.T) {
+		svc := &PaymentService{configService: NewPaymentConfigService(nil, &paymentFulfillmentSettingRepoStub{values: map[string]string{
+			SettingBalanceRechargeMult: "10",
+		}}, nil)}
+		base, multiplier, err := svc.affiliateRebateBaseAmount(ctx, balanceOrder)
+		require.NoError(t, err)
+		require.InDelta(t, 88, base, 0.00000001)
+		require.InDelta(t, defaultBalanceRechargeMultiplier, multiplier, 0.00000001)
+	})
+
+	t.Run("subscription without config service falls back to unit multiplier", func(t *testing.T) {
+		svc := &PaymentService{}
+		base, multiplier, err := svc.affiliateRebateBaseAmount(ctx, subscriptionOrder)
+		require.NoError(t, err)
+		require.InDelta(t, 9.99, base, 0.00000001)
+		require.InDelta(t, defaultBalanceRechargeMultiplier, multiplier, 0.00000001)
+	})
+
+	t.Run("subscription applies recharge multiplier", func(t *testing.T) {
+		svc := &PaymentService{configService: NewPaymentConfigService(nil, &paymentFulfillmentSettingRepoStub{values: map[string]string{
+			SettingBalanceRechargeMult: "10",
+		}}, nil)}
+		base, multiplier, err := svc.affiliateRebateBaseAmount(ctx, subscriptionOrder)
+		require.NoError(t, err)
+		require.InDelta(t, 99.9, base, 0.00000001)
+		require.InDelta(t, 10, multiplier, 0.00000001)
+	})
+
+	t.Run("subscription config read failure returns error", func(t *testing.T) {
+		svc := &PaymentService{configService: NewPaymentConfigService(nil, &paymentFulfillmentFailingSettingRepo{}, nil)}
+		_, _, err := svc.affiliateRebateBaseAmount(ctx, subscriptionOrder)
+		require.ErrorContains(t, err, "get payment config for affiliate rebate")
+	})
+
+	t.Run("nil order returns zero", func(t *testing.T) {
+		svc := &PaymentService{}
+		base, multiplier, err := svc.affiliateRebateBaseAmount(ctx, nil)
+		require.NoError(t, err)
+		require.Equal(t, float64(0), base)
+		require.InDelta(t, defaultBalanceRechargeMultiplier, multiplier, 0.00000001)
+	})
+
+	t.Run("unknown order type returns zero", func(t *testing.T) {
+		svc := &PaymentService{}
+		base, _, err := svc.affiliateRebateBaseAmount(ctx, &dbent.PaymentOrder{OrderType: "unknown"})
+		require.NoError(t, err)
+		require.Equal(t, float64(0), base)
+	})
 }
 
 func TestExecuteSubscriptionFulfillmentDoesNotDuplicateWorkAfterLegacySuccessAudit(t *testing.T) {
