@@ -90,6 +90,17 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		}
 	}
 	responsesLite := account.IsOpenAI() && isOpenAIResponsesLiteHeader(c.GetHeader(responsesLiteHeader))
+	// A usable ticket requires the Lite envelope. Decide before hosted image
+	// tool auto-injection, which is intentionally disabled for Lite requests.
+	if !responsesLite && isOpenAICodexTicketAccount(account) && s.openAICodexTicketEnabledContext(ctx) {
+		model := s.openAICodexTicketOutboundModel(account, extractOpenAICodexTicketModel(body), isOpenAIResponsesCompactPath(c))
+		if ticket, _ := s.openAICodexTicketForRequest(ctx, account, model); ticket != nil {
+			if _, _, liteErr := normalizeOpenAIResponsesLitePayloadForAccount(body, account); liteErr == nil {
+				responsesLite = true
+			}
+		}
+	}
+
 	if responsesLite {
 		liteBody, changed, liteErr := normalizeOpenAIResponsesLitePayloadForAccount(body, account)
 		if liteErr != nil {
@@ -351,7 +362,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		imageGenerationAllowed = GroupAllowsImageGeneration(apiKey.Group)
 	}
 	codexImageGenerationBridgeEnabled := isCodexCLI &&
-		!isOpenAIResponsesLiteHeader(c.GetHeader(responsesLiteHeader)) &&
+		!responsesLite &&
 		imageGenerationAllowed &&
 		codexImageGenerationExplicitToolPolicy != codexImageGenerationExplicitToolPolicyStrip &&
 		s.isCodexImageGenerationBridgeEnabled(ctx, account, apiKey)
@@ -1444,7 +1455,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	// 客户端回带的 x-codex-turn-state 若已知由其他账号铸造（failover 换号），
 	// 剥离后再出站——异账号 blob 与本账号的（指纹收敛后）出站身份自相矛盾。
 	s.guardOpenAICodexTurnStateEcho(c, account, req.Header)
-	if err := s.applyOpenAICodexTicket(ctx, account, extractOpenAICodexTicketModel(body), req.Header); err != nil {
+	if err := s.applyOpenAICodexTicketRequest(ctx, account, extractOpenAICodexTicketModel(body), req); err != nil {
 		return nil, err
 	}
 	if account.UsesOpenAICodexProtocol() {

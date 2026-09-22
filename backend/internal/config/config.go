@@ -1019,8 +1019,8 @@ type GatewayConfig struct {
 	// OpenAICompactModel: /responses/compact 上游使用的模型。
 	// compact 端点支持模型滞后于普通 /responses 时，可用该配置降级规避上游错误。
 	OpenAICompactModel string `mapstructure:"openai_compact_model"`
-	// OpenAICodexTicket: ChatGPT OAuth 账号按 (账号, 模型) 捕获 292 长度
-	// x-codex-turn-state，并在住宅 IP 业务请求中注入该头。默认关闭。
+	// OpenAICodexTicket: 按 (账号, 模型) 保存 292/332 state、同次 Cookie 和铸票代理，
+	// 业务成对复用并保持出站代理一致。默认关闭。
 	OpenAICodexTicket OpenAICodexTicketConfig `mapstructure:"openai_codex_ticket"`
 	// OpenAIWS: OpenAI Responses WebSocket 配置（默认开启，可按需回滚到 HTTP）
 	OpenAIWS GatewayOpenAIWSConfig `mapstructure:"openai_ws"`
@@ -1239,7 +1239,7 @@ func (c *UserMessageQueueConfig) GetEffectiveMode() string {
 }
 
 // OpenAICodexTicketConfig 控制 ChatGPT OAuth 的 x-codex-turn-state 门票。
-// 打票走 harvest_proxy_url（SOCKS），业务出站仍用账号住宅 proxy_id，只替换该请求头。
+// 打票与票据复用均走铸票代理，state 与同次 Cookie 成对注入。代理须保持出口稳定。
 // 门票默认有效 3600 秒，临近过期前 refresh_before_seconds 重新打票。
 type OpenAICodexTicketConfig struct {
 	Enabled                      bool     `mapstructure:"enabled"`

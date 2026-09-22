@@ -321,6 +321,24 @@ export async function refreshCredentials(id: number): Promise<RefreshCredentials
 }
 
 /**
+ * Immediately re-mint Codex turn-state tickets for an account.
+ *
+ * Clears probe cooldowns and probes the account synchronously, bypassing the
+ * harvest scope. Omit `models` to refresh every gated model. Returns the
+ * resulting per-model ticket statuses.
+ */
+export async function refreshCodexTickets(
+  id: number,
+  models?: string[]
+): Promise<Account['codex_turn_tickets']> {
+  const { data } = await apiClient.post<{ codex_turn_tickets: NonNullable<Account['codex_turn_tickets']> }>(
+    `/admin/accounts/${id}/codex-tickets/refresh`,
+    models && models.length ? { models } : {}
+  )
+  return data.codex_turn_tickets
+}
+
+/**
  * Apply OAuth credentials after re-authorization.
  *
  * Unlike `update()`, this endpoint:
@@ -1134,7 +1152,8 @@ export const accountsAPI = {
   saveOllamaCloudUsageSession,
   deleteOllamaCloudUsageSession,
   setOllamaCloudUsageAutoRefresh,
-  refreshOllamaCloudUsage
+  refreshOllamaCloudUsage,
+  refreshCodexTickets
 }
 
 export default accountsAPI

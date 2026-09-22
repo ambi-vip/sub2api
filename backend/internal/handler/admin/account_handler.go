@@ -65,6 +65,7 @@ type AccountHandler struct {
 	grokImportProber        grokImportProber
 	upstreamBillingProbe    *service.UpstreamBillingProbeService
 	ollamaCloudUsage        *service.OllamaCloudUsageService
+	openAIGatewayService    *service.OpenAIGatewayService
 	codexTicketSettings     *service.SettingService
 	cfg                     *config.Config
 }

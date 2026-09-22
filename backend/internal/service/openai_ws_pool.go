@@ -84,6 +84,8 @@ type openAIWSAcquireRequest struct {
 }
 
 type openAIWSHandshakeCompatibilityKey struct {
+	ticketState         string
+	ticketCookie        string
 	betaFeatures        string
 	codexInstallationID string
 	sessionIDHyphen     string
@@ -2364,6 +2366,10 @@ func normalizeOpenAIWSBetaFeatures(headers http.Header) string {
 func normalizeOpenAIWSHandshakeCompatibility(account *Account, headers http.Header) openAIWSHandshakeCompatibilityKey {
 	key := openAIWSHandshakeCompatibilityKey{
 		betaFeatures: normalizeOpenAIWSBetaFeatures(headers),
+	}
+	if headers.Get(openAICodexTicketLiteHeader) == "true" && headers.Get("Cookie") != "" {
+		key.ticketState = headers.Get(openAICodexTurnStateHeader)
+		key.ticketCookie = headers.Get("Cookie")
 	}
 	mode := activeCodexFingerprintMode(account)
 	if mode == codexFingerprintOff {

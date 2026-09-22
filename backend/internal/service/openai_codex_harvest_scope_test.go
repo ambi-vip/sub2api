@@ -117,7 +117,7 @@ func TestCodexHarvestPrioritySkipsFreshTicketsAndHonorsChangedScheduling(t *test
 	first := harvestScopeAccount(1, true, 2)
 	second := harvestScopeAccount(2, false, 2)
 	s, u, _ := harvestScopeService(t, "", []Account{first, second}, 1)
-	s.storeOpenAICodexTicket(context.Background(), &first, &openAICodexTicket{
+	s.storeOpenAICodexTicket(context.Background(), &first, &openAICodexTicket{Cookie: "__cflb=c; __oailb=o", ProxyURL: "http://proxy.example:8080", ResponseModel: "gpt-6-astra",
 		Model: "gpt-6-astra", State: fakeCodexTicketState(292), Length: 292, ExpiresAt: time.Now().Add(time.Hour),
 	})
 	s.refreshOpenAICodexTickets(context.Background())

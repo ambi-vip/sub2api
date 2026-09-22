@@ -87,6 +87,7 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	promptCacheKey string,
 	routingModel string,
 	routingServiceTier string,
+	ticketPayload ...[]byte,
 ) (http.Header, openAIWSSessionHeaderResolution, error) {
 	headers := make(http.Header)
 	if account == nil || !account.IsOpenAIAgentIdentity() {
@@ -141,9 +142,24 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	if state := strings.TrimSpace(turnState); state != "" {
 		headers.Set(openAIWSTurnStateHeader, state)
 	}
-	if err := s.applyOpenAICodexTicket(ctx, account, routingModel, headers); err != nil {
-		return nil, sessionResolution, err
+	ticket, ticketErr := s.openAICodexTicketForRequest(ctx, account, routingModel)
+	if ticketErr != nil {
+		logCodexTicketDecision(account, nil, routingModel, "websocket", "ticket_unavailable", true)
+		return nil, sessionResolution, ticketErr
 	}
+	if ticket == nil && isOpenAICodexTicketAccount(account) && s.openAICodexTicketGatedModel(routingModel) {
+		logCodexTicketDecision(account, nil, routingModel, "websocket", "ticket_unavailable", false)
+	}
+	if ticket != nil && len(ticketPayload) > 0 {
+		if _, _, err := normalizeOpenAIResponsesLitePayloadForAccount(ticketPayload[0], account); err != nil {
+			logCodexTicketDecision(account, ticket, routingModel, "websocket", "lite_incompatible", s.openAICodexTicketConfig().FailClosed)
+			if s.openAICodexTicketConfig().FailClosed {
+				return nil, sessionResolution, err
+			}
+			ticket = nil
+		}
+	}
+	sessionResolution.Ticket = ticket
 	if metadata := strings.TrimSpace(turnMetadata); metadata != "" {
 		headers.Set(openAIWSTurnMetadataHeader, metadata)
 	}
@@ -197,6 +213,9 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 		"soft_routing_hint",
 	)
 
+	if ticket != nil {
+		setOpenAICodexTicketHeaders(headers, ticket)
+	}
 	return headers, sessionResolution, nil
 }
 

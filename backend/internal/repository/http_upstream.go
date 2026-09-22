@@ -100,7 +100,7 @@ const (
 	upstreamProtocolModeOpenAIH1         = "openai_h1"
 	upstreamProtocolModeOpenAIH2         = "openai_h2"
 	upstreamProtocolModeOpenAIH1Fallback = "openai_h1_fallback"
-	upstreamProtocolModeOpenAIH1NoReuse  = "openai_h1_noreuse"
+	upstreamProtocolModeOpenAITicket     = "openai_ticket_h1"
 	upstreamProtocolModeGrok             = "grok"
 )
 
@@ -664,6 +664,9 @@ func (s *httpUpstreamService) getOrCreateClient(proxyURL string, accountID int64
 func (s *httpUpstreamService) getClientEntry(proxyURL string, accountID int64, accountConcurrency int, profile service.HTTPUpstreamProfile, markInFlight bool, enforceLimit bool) (*upstreamClientEntry, error) {
 	// 获取隔离模式
 	isolation := s.getIsolationMode()
+	if profile == service.HTTPUpstreamProfileOpenAIHarvest {
+		isolation = config.ConnectionPoolIsolationAccountProxy
+	}
 	// 标准化代理 URL 并解析
 	proxyKey, parsedProxy, err := normalizeProxyURL(proxyURL)
 	if err != nil {
@@ -1016,7 +1019,7 @@ func (s *httpUpstreamService) resolveProtocolMode(profile service.HTTPUpstreamPr
 		return upstreamProtocolModeGrok
 	}
 	if profile == service.HTTPUpstreamProfileOpenAIHarvest {
-		return upstreamProtocolModeOpenAIH1NoReuse
+		return upstreamProtocolModeOpenAITicket
 	}
 	if profile != service.HTTPUpstreamProfileOpenAI {
 		return upstreamProtocolModeDefault
@@ -1347,15 +1350,8 @@ func buildUpstreamTransport(settings poolSettings, proxyURL *url.URL, protocolMo
 		if _, err := enableHTTP2KeepAlive(transport); err != nil {
 			return nil, err
 		}
-	case upstreamProtocolModeOpenAIH1:
+	case upstreamProtocolModeOpenAIH1, upstreamProtocolModeOpenAITicket:
 		transport.ForceAttemptHTTP2 = false
-		transport.TLSNextProto = make(map[string]func(string, *tls.Conn) http.RoundTripper)
-	case upstreamProtocolModeOpenAIH1NoReuse:
-		// Harvest must open a fresh CONNECT each attempt so the harvest proxy can rotate egress IPs.
-		transport.ForceAttemptHTTP2 = false
-		transport.DisableKeepAlives = true
-		transport.MaxIdleConns = 0
-		transport.MaxIdleConnsPerHost = 0
 		transport.TLSNextProto = make(map[string]func(string, *tls.Conn) http.RoundTripper)
 	case upstreamProtocolModeOpenAIH1Fallback:
 		// 显式禁用 HTTP/2，确保代理不兼容场景回退到 HTTP/1.1。

@@ -538,16 +538,16 @@ export default {
         codexHardeningTitle: 'Codex 设置',
         codexTicketEnabled: '292 打票',
         codexTicketEnabledDesc:
-          '关闭后不打票、不注入 x-codex-turn-state，按原链路转发。开启后后台打票，并在业务请求中覆盖该头。',
+          '关闭后不打票、不注入 x-codex-turn-state，按原链路转发。开启后后台采集票据及同次 Cookie，业务请求成对复用并使用铸票代理。',
         codexTicketFailClosed: '无票时暂停账号',
         codexTicketFailClosedDesc:
           '默认关闭。关闭时，票据缺失、过期或形态不匹配只影响注入，账号仍可正常调度；开启后，无有效票据的目标模型账号会暂停调度。',
         codexTicketModels: '打票模型',
         codexTicketModelsDesc: '只对勾选的模型打票和注入；取消勾选后该模型按原链路转发。',
-        codexTicketShapeNotice: '292/332 仅表示观测到的 state 形态，不代表模型质量。系统只注入符合当前校验规则的票据；关闭「无票时暂停账号」后，形态不匹配不会阻断请求。',
+        codexTicketShapeNotice: '292/332 仅表示观测到的 state 形态，不代表模型质量。采集须同时通过票据形态、完整 Cookie 和响应模型校验；旧版仅含 state 的缓存需重新采集。关闭「无票时暂停账号」后，形态不匹配不会阻断请求。',
         codexTicketHarvestProxy: '292 打票代理',
         codexTicketHarvestProxyDesc:
-          '仅在门票功能开启时用于打票，保存后后续探测会使用新代理，无需重启。日常业务仍走账号自己的住宅代理。填写完整代理 URL（http 或 socks5h，含用户名和密码）。代理服务商需自行负责出口 IP 轮换。留空并保存表示不改已保存的值。',
+          '用于铸票及该票据的业务请求。代理须保持会话出口 IP 稳定，不能每次连接随机换 IP；无有效票据且允许请求时使用账号代理。修改后新票使用新代理，已有票在到期前仍使用原代理。填写完整 HTTP(S) 或 SOCKS5(h) URL。留空保存保留原值。',
         codexTicketHarvestProxyPlaceholder: "http://user:pass{'@'}proxy.example.com:1080",
         codexTicketHarvestProxyConfigured: '已配置（密码已隐藏）。要更换请整段粘贴新的代理 URL。',
         codexClientRestrictionTitle: 'Codex 客户端限制',

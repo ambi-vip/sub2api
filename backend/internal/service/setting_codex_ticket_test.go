@@ -83,7 +83,7 @@ func TestCodexTicketEnabledRuntimeSettingOverridesYaml(t *testing.T) {
 	svc := ticketTestService(t, config.OpenAICodexTicketConfig{Enabled: false, FailClosed: true}, nil)
 	svc.settingService = settings
 	account := ticketTestAccount(41)
-	svc.storeOpenAICodexTicket(context.Background(), account, &openAICodexTicket{
+	svc.storeOpenAICodexTicket(context.Background(), account, &openAICodexTicket{Cookie: "__cflb=c; __oailb=o", ProxyURL: "http://proxy.example:8080", ResponseModel: "gpt-6-astra",
 		AccountID:  41,
 		Model:      "gpt-6-astra",
 		State:      fakeCodexTicketState(292),

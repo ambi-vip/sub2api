@@ -840,7 +840,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		turnState = strings.TrimSpace(c.GetHeader(openAIWSTurnStateHeader))
 		turnMetadata = strings.TrimSpace(c.GetHeader(openAIWSTurnMetadataHeader))
 	}
-	headers, _, buildHdrErr := s.buildOpenAIWSHeaders(
+	headers, sessionResolution, buildHdrErr := s.buildOpenAIWSHeaders(
 		ctx,
 		c,
 		account,
@@ -852,14 +852,19 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		promptCacheKey,
 		gjson.GetBytes(firstClientMessage, "model").String(),
 		gjson.GetBytes(firstClientMessage, "service_tier").String(),
+		firstClientMessage,
 	)
 	if buildHdrErr != nil {
 		return fmt.Errorf("build ws headers: %w", buildHdrErr)
 	}
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
+	if sessionResolution.Ticket != nil {
+		normalized, _, normalizeErr := normalizeOpenAIResponsesLitePayloadForAccount(firstClientMessage, account)
+		if normalizeErr != nil {
+			return normalizeErr
+		}
+		firstClientMessage = normalized
 	}
+	proxyURL := openAICodexTicketProxy(sessionResolution.Ticket, account)
 
 	dialer := s.getOpenAIWSPassthroughDialer()
 	if dialer == nil {
@@ -996,7 +1001,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					}
 				}()
 			}
-			responsesLite := isResponseCreate && isOpenAIResponsesLiteWebSocketPayload(payload)
+			responsesLite := isResponseCreate && (sessionResolution.Ticket != nil || isOpenAIResponsesLiteWebSocketPayload(payload))
 			if isResponseCreate {
 				if normalized, compatibilityChanged, normalizeErr := normalizeOpenAIResponsesWebSocketCompatibilityBody(payload, account, responsesLite); normalizeErr != nil {
 					return payload, nil, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket request payload", normalizeErr)
@@ -1068,6 +1073,9 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 						payload = s.ReplaceModelInBody(payload, upstreamModel)
 					}
 				}
+			}
+			if isResponseCreate && !s.openAICodexTicketSessionUsable(account, sessionResolution.Ticket, extractOpenAICodexTicketModel(payload)) {
+				return payload, nil, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "ticket session expired or changed; reconnect to refresh", ErrOpenAICodexTicketUnavailable)
 			}
 			// 在评估策略前先刷新 capturedSessionModel：客户端可能通过
 			// session.update 修改 session-level model（Realtime /
@@ -1198,6 +1206,8 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				)
 			},
 			OnTurnComplete: func(turn openaiwsv2.RelayTurnResult) {
+				ticketModels := &upstreamResponseModelObserver{terminal: turn.ResponseModel, conflict: turn.ResponseModelConflict}
+				s.observeOpenAICodexTicketWS(account, sessionResolution.Ticket, []byte(`{"type":`+jsonString(turn.TerminalEventType)+`,"model":`+jsonString(turn.ResponseModel)+`}`), ticketModels)
 				turnNo := int(completedTurns.Add(1))
 				if hooks != nil && hooks.TurnStarted != nil && !turn.StartedAt.IsZero() {
 					hooks.TurnStarted(turnNo, turn.StartedAt)

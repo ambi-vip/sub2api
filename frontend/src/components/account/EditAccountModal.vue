@@ -2256,10 +2256,23 @@
         v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token') && codexTurnTickets.length"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
-        <label class="input-label mb-0">{{ t('admin.accounts.openai.codexTurnTicket') }}</label>
-        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          {{ t('admin.accounts.openai.codexTurnTicketDesc') }}
-        </p>
+        <div class="flex items-start justify-between gap-4">
+          <div class="min-w-0">
+            <label class="input-label mb-0">{{ t('admin.accounts.openai.codexTurnTicket') }}</label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.openai.codexTurnTicketDesc') }}
+            </p>
+          </div>
+          <button
+            type="button"
+            data-testid="edit-codex-ticket-refresh"
+            class="flex-shrink-0 rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-500 dark:text-gray-300 dark:hover:bg-dark-700"
+            :disabled="codexTicketRefreshing || !props.account"
+            @click="handleRefreshCodexTickets"
+          >
+            {{ codexTicketRefreshing ? t('admin.accounts.openai.codexTurnTicketRefreshing') : t('admin.accounts.openai.codexTurnTicketRefresh') }}
+          </button>
+        </div>
         <div class="mt-3 space-y-1.5">
           <div v-for="ticket in codexTurnTickets" :key="ticket.model" class="flex items-center justify-between text-sm">
             <span class="font-medium">{{ ticket.model }}</span>
@@ -3169,6 +3182,22 @@ const selectableGroups = computed(() => {
 const isSparkShadow = computed(() => props.account?.parent_account_id != null)
 
 const codexTurnTickets = computed(() => props.account?.codex_turn_tickets ?? [])
+
+const codexTicketRefreshing = ref(false)
+
+async function handleRefreshCodexTickets() {
+  if (!props.account || codexTicketRefreshing.value) return
+  codexTicketRefreshing.value = true
+  try {
+    const tickets = await adminAPI.accounts.refreshCodexTickets(props.account.id)
+    emit('updated', { ...props.account, codex_turn_tickets: tickets })
+    appStore.showSuccess(t('admin.accounts.openai.codexTurnTicketRefreshed'))
+  } catch {
+    appStore.showError(t('admin.accounts.openai.codexTurnTicketRefreshFailed'))
+  } finally {
+    codexTicketRefreshing.value = false
+  }
+}
 
 function formatCodexTicketRemaining(seconds: number) {
   const total = Math.max(0, Math.floor(seconds || 0))

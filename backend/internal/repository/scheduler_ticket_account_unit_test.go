@@ -5,8 +5,9 @@ package repository
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
+	"encoding/binary"
 	"fmt"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -103,12 +104,16 @@ func TestSchedulerTicketRedisToGateway(t *testing.T) {
 	ctx := context.Background()
 	cache := newSchedulerCacheUnit(t)
 	groupID := int64(2)
+	rawState := make([]byte, 57+16*10)
+	rawState[0] = 0x80
+	binary.BigEndian.PutUint64(rawState[1:9], uint64(time.Now().Unix()-60))
 	account := service.Account{
 		ID: 201, Platform: service.PlatformOpenAI, Type: service.AccountTypeOAuth,
 		Status: service.StatusActive, Schedulable: true, GroupIDs: []int64{groupID}, Concurrency: 10,
 		Credentials: map[string]any{"chatgpt_account_id": "synthetic", "email": "fixture@example.invalid", "plan_type": "pro"},
 		Extra: map[string]any{"codex_turn_ticket:gpt-6-astra": map[string]any{
-			"state": "gAAAAA" + strings.Repeat("B", 286), "length": 292,
+			"state": base64.URLEncoding.EncodeToString(rawState), "length": 292,
+			"model": "gpt-6-astra", "response_model": "gpt-6-astra", "cookie": "__cflb=c; __oailb=o", "proxy_url": "http://proxy.example:8080",
 			"identity":    fmt.Sprintf("%x", sha256.Sum256([]byte("synthetic\x00fixture@example.invalid"))),
 			"captured_at": time.Now(), "issued_at": time.Now(), "expires_at": time.Now().Add(30 * time.Minute),
 		}},

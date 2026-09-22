@@ -545,16 +545,16 @@ export default {
         codexHardeningTitle: "Codex Settings",
         codexTicketEnabled: "292 ticket harvest",
         codexTicketEnabledDesc:
-          "When off, the gateway neither harvests nor injects x-codex-turn-state and forwards traffic as usual. When on, it harvests tickets in the background and overwrites that header on production requests.",
+          "When off, the gateway neither harvests nor injects x-codex-turn-state and forwards traffic as usual. When on, it harvests a ticket and its matching cookies, then reuses both through the minting proxy.",
         codexTicketFailClosed: "Pause accounts without a ticket",
         codexTicketFailClosedDesc:
           "Off by default. When off, a missing, expired, or mismatched ticket only disables injection and the account remains schedulable. When on, target-model accounts without a valid ticket are paused.",
         codexTicketModels: "Ticket models",
         codexTicketModelsDesc: "Harvest and inject tickets only for selected models. Unselected models use the normal forwarding path.",
-        codexTicketShapeNotice: "292/332 only describe the observed state shape and do not measure model quality. Only tickets matching the current validation rules are injected; with account pausing off, a shape mismatch does not block requests.",
+        codexTicketShapeNotice: "292/332 only describe the observed state shape and do not measure model quality. Harvesting requires a valid state, both routing cookies, and the requested response model. Legacy state-only tickets must be minted again; with account pausing off, a shape mismatch does not block requests.",
         codexTicketHarvestProxy: "292 harvest proxy",
         codexTicketHarvestProxyDesc:
-          "Used only for minting 292 tickets when the ticket feature is enabled. Changes apply to subsequent probes without a restart. Production traffic still uses each account's residential proxy. Paste a full HTTP or SOCKS5h proxy URL including username and password. The proxy provider must handle IP rotation. Leave blank when saving to keep the stored value.",
+          "Used for minting and requests reusing that ticket. The proxy must keep a stable session egress IP, rather than rotating IPs per connection. Allowed requests without a ticket use the account proxy. Changes apply to new tickets; existing tickets retain their original proxy until expiry. Paste a full HTTP(S) or SOCKS5(h) URL. Leave blank to keep the stored value.",
         codexTicketHarvestProxyPlaceholder: "http://user:pass{'@'}proxy.example.com:1080",
         codexTicketHarvestProxyConfigured: "Configured (password hidden). Paste a full new proxy URL to replace it.",
         codexClientRestrictionTitle: "Codex client restriction",

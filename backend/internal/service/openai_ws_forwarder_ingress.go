@@ -269,6 +269,14 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			normalized = next
 		}
 		responsesLite := isOpenAIResponsesLiteWebSocketPayload(normalized)
+		if !responsesLite && isOpenAICodexTicketAccount(account) && s.openAICodexTicketEnabledContext(ctx) {
+			model := s.openAICodexTicketOutboundModel(account, extractOpenAICodexTicketModel(normalized), false)
+			if ticket, _ := s.openAICodexTicketForRequest(ctx, account, model); ticket != nil {
+				if _, _, liteErr := normalizeOpenAIResponsesLitePayloadForAccount(normalized, account); liteErr == nil {
+					responsesLite = true
+				}
+			}
+		}
 		if compatibilityBody, compatibilityChanged, compatibilityErr := normalizeOpenAIResponsesWebSocketCompatibilityBody(normalized, account, responsesLite); compatibilityErr != nil {
 			return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket request payload", compatibilityErr)
 		} else if compatibilityChanged {
@@ -345,7 +353,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			codexImageGenerationExplicitToolPolicy = account.CodexImageGenerationExplicitToolPolicy()
 		}
 		codexBridgeEnabled := isCodexCLI &&
-			!isOpenAIResponsesLiteWebSocketPayload(normalized) &&
+			!responsesLite &&
 			imageGenerationAllowed &&
 			codexImageGenerationExplicitToolPolicy != codexImageGenerationExplicitToolPolicyStrip &&
 			s.isCodexImageGenerationBridgeEnabled(ctx, account, apiKey)
@@ -772,7 +780,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	}
 
 	firstRoutingFields := gjson.GetManyBytes(firstPayload.payloadRaw, "model", "service_tier")
-	wsHeaders, _, buildHdrErr := s.buildOpenAIWSHeaders(
+	wsHeaders, sessionResolution, buildHdrErr := s.buildOpenAIWSHeaders(
 		ctx,
 		c,
 		account,
@@ -784,6 +792,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		firstPayload.promptCacheKey,
 		firstRoutingFields[0].String(),
 		firstRoutingFields[1].String(),
+		firstPayload.payloadRaw,
 	)
 	if buildHdrErr != nil {
 		return fmt.Errorf("build ws headers: %w", buildHdrErr)
@@ -795,12 +804,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		HeadersFactory: func(factoryCtx context.Context, headers http.Header) (http.Header, error) {
 			return s.refreshOpenAIAgentIdentityHeaders(factoryCtx, account, headers)
 		},
-		ProxyURL: func() string {
-			if account.ProxyID != nil && account.Proxy != nil {
-				return account.Proxy.URL()
-			}
-			return ""
-		}(),
+		ProxyURL:     openAICodexTicketProxy(sessionResolution.Ticket, account),
 		ForceNewConn: false,
 	}
 	pool := s.getOpenAIWSConnPool()
@@ -936,7 +940,9 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			if updatedHeaders == nil {
 				updatedHeaders = make(http.Header)
 			}
-			updatedHeaders.Set(openAIWSTurnStateHeader, handshakeTurnState)
+			if sessionResolution.Ticket == nil {
+				updatedHeaders.Set(openAIWSTurnStateHeader, handshakeTurnState)
+			}
 			baseAcquireReq.Headers = updatedHeaders
 		}
 		logOpenAIWSModeInfo(
@@ -958,8 +964,22 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	var rejectedFieldRetryState *openAIResponsesRejectedFieldRetryState
 	sendAndRelay := func(turn int, lease *openAIWSConnLease, payload []byte, payloadBytes int, originalModel string, imageBillingModel string, imageSizeTier string, imageInputSize string, requestedReasoningEffort *string) (*OpenAIForwardResult, error) {
 		responseModelObserver := &upstreamResponseModelObserver{}
+		if !s.openAICodexTicketSessionUsable(account, sessionResolution.Ticket, extractOpenAICodexTicketModel(payload)) {
+			if lease != nil {
+				lease.MarkBroken()
+			}
+			return nil, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "ticket session expired or changed; reconnect to refresh", ErrOpenAICodexTicketUnavailable)
+		}
 		if lease == nil {
 			return nil, errors.New("upstream websocket lease is nil")
+		}
+		if sessionResolution.Ticket != nil {
+			normalized, _, normalizeErr := normalizeOpenAIResponsesLitePayloadForAccount(payload, account)
+			if normalizeErr != nil {
+				return nil, normalizeErr
+			}
+			payload = normalized
+			payloadBytes = len(payload)
 		}
 		turnStart := time.Now()
 		wroteDownstream := false
@@ -1026,6 +1046,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 
 			eventType, eventResponseID, _ := parseOpenAIWSEventEnvelope(upstreamMessage)
 			responseModelObserver.ObserveOpenAI(upstreamMessage, eventType)
+			s.observeOpenAICodexTicketWS(account, sessionResolution.Ticket, upstreamMessage, responseModelObserver)
 			if responseID == "" && eventResponseID != "" {
 				responseID = eventResponseID
 			}
@@ -1883,10 +1904,10 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			return parseErr
 		}
 		nextRoutingFields := gjson.GetManyBytes(nextPayload.payloadRaw, "model", "service_tier")
-		if nextPayload.promptCacheKey != "" {
+		if nextPayload.promptCacheKey != "" && sessionResolution.Ticket == nil {
 			// ingress 会话在整个客户端 WS 生命周期内复用同一上游连接；
 			// prompt_cache_key 对握手头的更新仅在未来需要重新建连时生效。
-			updatedHeaders, _, updHdrErr := s.buildOpenAIWSHeaders(
+			updatedHeaders, updatedResolution, updHdrErr := s.buildOpenAIWSHeaders(
 				ctx,
 				c,
 				account,
@@ -1898,11 +1919,13 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				nextPayload.promptCacheKey,
 				nextRoutingFields[0].String(),
 				nextRoutingFields[1].String(),
+				nextPayload.payloadRaw,
 			)
 			if updHdrErr != nil {
 				logOpenAIWSModeInfo("ingress_ws_update_headers_failed account_id=%d err=%v", account.ID, updHdrErr)
 			} else {
 				baseAcquireReq.Headers = updatedHeaders
+				baseAcquireReq.ProxyURL = openAICodexTicketProxy(updatedResolution.Ticket, account)
 			}
 		}
 		setOpenAICodexRoutingHint(baseAcquireReq.Headers, account, nextRoutingFields[0].String(), nextRoutingFields[1].String())
