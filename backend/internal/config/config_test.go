@@ -1996,6 +1996,31 @@ func TestValidateConfigErrors(t *testing.T) {
 			wantErr: "gateway.image_concurrency.max_waiting_requests must be non-negative",
 		},
 		{
+			name:    "gateway large request concurrency threshold negative",
+			mutate:  func(c *Config) { c.Gateway.LargeRequestConcurrency.ThresholdBytes = -1 },
+			wantErr: "gateway.large_request_concurrency.threshold_bytes must be non-negative",
+		},
+		{
+			name:    "gateway large request concurrency enabled requires limit",
+			mutate:  func(c *Config) { c.Gateway.LargeRequestConcurrency.MaxConcurrentRequests = 0 },
+			wantErr: "gateway.large_request_concurrency threshold_bytes and max_concurrent_requests must be positive when enabled",
+		},
+		{
+			name:    "gateway large request concurrency overflow mode invalid",
+			mutate:  func(c *Config) { c.Gateway.LargeRequestConcurrency.OverflowMode = "queue" },
+			wantErr: "gateway.large_request_concurrency.overflow_mode",
+		},
+		{
+			name:    "gateway large request concurrency wait timeout negative",
+			mutate:  func(c *Config) { c.Gateway.LargeRequestConcurrency.WaitTimeoutSeconds = -1 },
+			wantErr: "gateway.large_request_concurrency.wait_timeout_seconds must be non-negative",
+		},
+		{
+			name:    "gateway large request concurrency max waiting negative",
+			mutate:  func(c *Config) { c.Gateway.LargeRequestConcurrency.MaxWaitingRequests = -1 },
+			wantErr: "gateway.large_request_concurrency.max_waiting_requests must be non-negative",
+		},
+		{
 			name:    "gateway max line size",
 			mutate:  func(c *Config) { c.Gateway.MaxLineSize = 1024 },
 			wantErr: "gateway.max_line_size must be at least",
@@ -2625,6 +2650,24 @@ func TestLoad_DefaultGatewayImageStreamConfig(t *testing.T) {
 	}
 	if cfg.Gateway.ImageConcurrency.MaxWaitingRequests != 100 {
 		t.Fatalf("image_concurrency.max_waiting_requests = %d, want 100", cfg.Gateway.ImageConcurrency.MaxWaitingRequests)
+	}
+	if !cfg.Gateway.LargeRequestConcurrency.Enabled {
+		t.Fatalf("large_request_concurrency.enabled = false, want true")
+	}
+	if cfg.Gateway.LargeRequestConcurrency.ThresholdBytes != 64*1024*1024 {
+		t.Fatalf("large_request_concurrency.threshold_bytes = %d, want %d", cfg.Gateway.LargeRequestConcurrency.ThresholdBytes, 64*1024*1024)
+	}
+	if cfg.Gateway.LargeRequestConcurrency.MaxConcurrentRequests != 8 {
+		t.Fatalf("large_request_concurrency.max_concurrent_requests = %d, want 8", cfg.Gateway.LargeRequestConcurrency.MaxConcurrentRequests)
+	}
+	if cfg.Gateway.LargeRequestConcurrency.OverflowMode != ImageConcurrencyOverflowModeReject {
+		t.Fatalf("large_request_concurrency.overflow_mode = %q, want %q", cfg.Gateway.LargeRequestConcurrency.OverflowMode, ImageConcurrencyOverflowModeReject)
+	}
+	if cfg.Gateway.LargeRequestConcurrency.WaitTimeoutSeconds != 15 {
+		t.Fatalf("large_request_concurrency.wait_timeout_seconds = %d, want 15", cfg.Gateway.LargeRequestConcurrency.WaitTimeoutSeconds)
+	}
+	if cfg.Gateway.LargeRequestConcurrency.MaxWaitingRequests != 2 {
+		t.Fatalf("large_request_concurrency.max_waiting_requests = %d, want 2", cfg.Gateway.LargeRequestConcurrency.MaxWaitingRequests)
 	}
 	if cfg.Gateway.ImageStreamDataIntervalTimeout <= cfg.Gateway.StreamDataIntervalTimeout {
 		t.Fatalf("image stream timeout = %d, want greater than ordinary stream timeout %d", cfg.Gateway.ImageStreamDataIntervalTimeout, cfg.Gateway.StreamDataIntervalTimeout)

@@ -220,6 +220,23 @@ func (h *UsageHandler) List(c *gin.Context) {
 	response.Paginated(c, out, result.Total, page, pageSize)
 }
 
+// GetByID handles fetching one usage record with detail-only observability
+// fields such as latency_breakdown.
+// GET /api/v1/admin/usage/:id
+func (h *UsageHandler) GetByID(c *gin.Context) {
+	id, err := strconv.ParseInt(strings.TrimSpace(c.Param("id")), 10, 64)
+	if err != nil || id <= 0 {
+		response.BadRequest(c, "Invalid usage ID")
+		return
+	}
+	record, err := h.usageService.GetByID(c.Request.Context(), id)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, dto.UsageLogFromServiceAdmin(record))
+}
+
 // Stats handles getting usage statistics with filters
 // GET /api/v1/admin/usage/stats
 func (h *UsageHandler) Stats(c *gin.Context) {

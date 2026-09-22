@@ -712,6 +712,18 @@ func (_u *UsageLogUpdate) ClearFirstTokenMs() *UsageLogUpdate {
 	return _u
 }
 
+// SetLatencyBreakdown sets the "latency_breakdown" field.
+func (_u *UsageLogUpdate) SetLatencyBreakdown(v map[string]interface{}) *UsageLogUpdate {
+	_u.mutation.SetLatencyBreakdown(v)
+	return _u
+}
+
+// ClearLatencyBreakdown clears the value of the "latency_breakdown" field.
+func (_u *UsageLogUpdate) ClearLatencyBreakdown() *UsageLogUpdate {
+	_u.mutation.ClearLatencyBreakdown()
+	return _u
+}
+
 // SetUserAgent sets the "user_agent" field.
 func (_u *UsageLogUpdate) SetUserAgent(v string) *UsageLogUpdate {
 	_u.mutation.SetUserAgent(v)
@@ -1308,6 +1320,12 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.FirstTokenMsCleared() {
 		_spec.ClearField(usagelog.FieldFirstTokenMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.LatencyBreakdown(); ok {
+		_spec.SetField(usagelog.FieldLatencyBreakdown, field.TypeJSON, value)
+	}
+	if _u.mutation.LatencyBreakdownCleared() {
+		_spec.ClearField(usagelog.FieldLatencyBreakdown, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.UserAgent(); ok {
 		_spec.SetField(usagelog.FieldUserAgent, field.TypeString, value)
@@ -2226,6 +2244,18 @@ func (_u *UsageLogUpdateOne) ClearFirstTokenMs() *UsageLogUpdateOne {
 	return _u
 }
 
+// SetLatencyBreakdown sets the "latency_breakdown" field.
+func (_u *UsageLogUpdateOne) SetLatencyBreakdown(v map[string]interface{}) *UsageLogUpdateOne {
+	_u.mutation.SetLatencyBreakdown(v)
+	return _u
+}
+
+// ClearLatencyBreakdown clears the value of the "latency_breakdown" field.
+func (_u *UsageLogUpdateOne) ClearLatencyBreakdown() *UsageLogUpdateOne {
+	_u.mutation.ClearLatencyBreakdown()
+	return _u
+}
+
 // SetUserAgent sets the "user_agent" field.
 func (_u *UsageLogUpdateOne) SetUserAgent(v string) *UsageLogUpdateOne {
 	_u.mutation.SetUserAgent(v)
@@ -2852,6 +2882,12 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	}
 	if _u.mutation.FirstTokenMsCleared() {
 		_spec.ClearField(usagelog.FieldFirstTokenMs, field.TypeInt)
+	}
+	if value, ok := _u.mutation.LatencyBreakdown(); ok {
+		_spec.SetField(usagelog.FieldLatencyBreakdown, field.TypeJSON, value)
+	}
+	if _u.mutation.LatencyBreakdownCleared() {
+		_spec.ClearField(usagelog.FieldLatencyBreakdown, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.UserAgent(); ok {
 		_spec.SetField(usagelog.FieldUserAgent, field.TypeString, value)

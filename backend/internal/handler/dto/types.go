@@ -633,6 +633,9 @@ type UsageLog struct {
 	NativeCompactionV2 bool `json:"native_compaction_v2"`
 	DurationMs         *int `json:"duration_ms"`
 	FirstTokenMs       *int `json:"first_token_ms"`
+	// LatencyBreakdown is omitted from list responses because list queries do
+	// not load it; single-record detail responses include it when available.
+	LatencyBreakdown *service.UsageLatencyBreakdown `json:"latency_breakdown,omitempty"`
 
 	// 图片生成字段
 	ImageCount         int            `json:"image_count"`

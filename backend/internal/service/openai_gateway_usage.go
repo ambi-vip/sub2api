@@ -43,6 +43,9 @@ type OpenAIRecordUsageInput struct {
 	// Responses handler from stream=true + compaction_trigger. It never stores
 	// the request payload and does not replace the transport request type.
 	NativeCompactionV2 bool
+	// LatencyBreakdown is a request-owned immutable snapshot captured before the
+	// async usage worker starts. Callers must not read gin.Context in the worker.
+	LatencyBreakdown *UsageLatencyBreakdown
 	ChannelUsageFields
 }
 
@@ -404,6 +407,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		ImageSizeSource:          optionalTrimmedStringPtr(result.ImageSizeSource),
 		ImageSizeBreakdown:       imageSizeBreakdown,
 		NativeCompactionV2:       input.NativeCompactionV2,
+		LatencyBreakdown:         input.LatencyBreakdown,
 	}
 	isVideoUsage := isGrokVideoUsageResult(result, billingModels)
 	if isVideoUsage {

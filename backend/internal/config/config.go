@@ -939,6 +939,21 @@ type ImageConcurrencyConfig struct {
 	MaxWaitingRequests int `mapstructure:"max_waiting_requests"`
 }
 
+type LargeRequestConcurrencyConfig struct {
+	// Enabled enables a process-local limiter for large OpenAI Responses bodies.
+	Enabled bool `mapstructure:"enabled"`
+	// ThresholdBytes classifies the decoded request body as large.
+	ThresholdBytes int64 `mapstructure:"threshold_bytes"`
+	// MaxConcurrentRequests is the number of large Responses requests allowed in this process.
+	MaxConcurrentRequests int `mapstructure:"max_concurrent_requests"`
+	// OverflowMode controls whether excess requests are rejected or wait for a slot.
+	OverflowMode string `mapstructure:"overflow_mode"`
+	// WaitTimeoutSeconds bounds overflow waiting when OverflowMode is wait.
+	WaitTimeoutSeconds int `mapstructure:"wait_timeout_seconds"`
+	// MaxWaitingRequests bounds the process-local wait queue. Waiting requests already retain their body.
+	MaxWaitingRequests int `mapstructure:"max_waiting_requests"`
+}
+
 const (
 	ImageConcurrencyOverflowModeReject = "reject"
 	ImageConcurrencyOverflowModeWait   = "wait"
@@ -1019,6 +1034,8 @@ type GatewayConfig struct {
 	OpenAIProxyStreamCircuit GatewayOpenAIProxyStreamCircuitConfig `mapstructure:"openai_proxy_stream_circuit"`
 	// ImageConcurrency: 图片生成独立并发限制配置（默认关闭）
 	ImageConcurrency ImageConcurrencyConfig `mapstructure:"image_concurrency"`
+	// LargeRequestConcurrency protects memory and upstream capacity from concurrent large Responses bodies.
+	LargeRequestConcurrency LargeRequestConcurrencyConfig `mapstructure:"large_request_concurrency"`
 
 	// HTTP 上游连接池配置（性能优化：支持高并发场景调优）
 	// MaxIdleConns: 所有主机的最大空闲连接总数
@@ -2498,6 +2515,12 @@ func setDefaults() {
 	viper.SetDefault("gateway.image_concurrency.overflow_mode", ImageConcurrencyOverflowModeReject)
 	viper.SetDefault("gateway.image_concurrency.wait_timeout_seconds", 30)
 	viper.SetDefault("gateway.image_concurrency.max_waiting_requests", 100)
+	viper.SetDefault("gateway.large_request_concurrency.enabled", true)
+	viper.SetDefault("gateway.large_request_concurrency.threshold_bytes", int64(64*1024*1024))
+	viper.SetDefault("gateway.large_request_concurrency.max_concurrent_requests", 8)
+	viper.SetDefault("gateway.large_request_concurrency.overflow_mode", ImageConcurrencyOverflowModeReject)
+	viper.SetDefault("gateway.large_request_concurrency.wait_timeout_seconds", 15)
+	viper.SetDefault("gateway.large_request_concurrency.max_waiting_requests", 2)
 	viper.SetDefault("gateway.antigravity_fallback_cooldown_minutes", 1)
 	viper.SetDefault("gateway.antigravity_extra_retries", 10)
 	viper.SetDefault("gateway.max_body_size", int64(256*1024*1024))
@@ -3361,6 +3384,28 @@ func (c *Config) Validate() error {
 	}
 	if c.Gateway.ImageConcurrency.MaxWaitingRequests < 0 {
 		return fmt.Errorf("gateway.image_concurrency.max_waiting_requests must be non-negative")
+	}
+	largeRequestConcurrency := c.Gateway.LargeRequestConcurrency
+	if largeRequestConcurrency.ThresholdBytes < 0 {
+		return fmt.Errorf("gateway.large_request_concurrency.threshold_bytes must be non-negative")
+	}
+	if largeRequestConcurrency.MaxConcurrentRequests < 0 {
+		return fmt.Errorf("gateway.large_request_concurrency.max_concurrent_requests must be non-negative")
+	}
+	if largeRequestConcurrency.Enabled && (largeRequestConcurrency.ThresholdBytes == 0 || largeRequestConcurrency.MaxConcurrentRequests == 0) {
+		return fmt.Errorf("gateway.large_request_concurrency threshold_bytes and max_concurrent_requests must be positive when enabled")
+	}
+	switch strings.TrimSpace(largeRequestConcurrency.OverflowMode) {
+	case "", ImageConcurrencyOverflowModeReject, ImageConcurrencyOverflowModeWait:
+	default:
+		return fmt.Errorf("gateway.large_request_concurrency.overflow_mode must be one of: %s/%s",
+			ImageConcurrencyOverflowModeReject, ImageConcurrencyOverflowModeWait)
+	}
+	if largeRequestConcurrency.WaitTimeoutSeconds < 0 {
+		return fmt.Errorf("gateway.large_request_concurrency.wait_timeout_seconds must be non-negative")
+	}
+	if largeRequestConcurrency.MaxWaitingRequests < 0 {
+		return fmt.Errorf("gateway.large_request_concurrency.max_waiting_requests must be non-negative")
 	}
 	if c.Gateway.MaxIdleConns <= 0 {
 		return fmt.Errorf("gateway.max_idle_conns must be positive")

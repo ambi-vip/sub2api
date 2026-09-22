@@ -28,6 +28,11 @@ const (
 	OpsUpstreamLatencyMsKey  = "ops_upstream_latency_ms"
 	OpsResponseLatencyMsKey  = "ops_response_latency_ms"
 	OpsTimeToFirstTokenMsKey = "ops_time_to_first_token_ms"
+	// HTTP transport phase timing for the last upstream attempt.
+	OpsUpstreamConnectionAcquireMsKey = "ops_upstream_connection_acquire_ms"
+	OpsUpstreamRequestWriteMsKey      = "ops_upstream_request_write_ms"
+	OpsUpstreamFirstByteWaitMsKey     = "ops_upstream_first_byte_wait_ms"
+	OpsUpstreamConnectionReusedKey    = "ops_upstream_connection_reused"
 	// OpenAI WS 关键观测字段
 	OpsOpenAIWSQueueWaitMsKey = "ops_openai_ws_queue_wait_ms"
 	OpsOpenAIWSConnPickMsKey  = "ops_openai_ws_conn_pick_ms"

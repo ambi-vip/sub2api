@@ -45,6 +45,7 @@ type OpenAIGatewayHandler struct {
 	opsService                 *service.OpsService
 	concurrencyHelper          *ConcurrencyHelper
 	imageLimiter               *imageConcurrencyLimiter
+	largeRequestLimiter        *imageConcurrencyLimiter
 	maxAccountSwitches         int
 	cfg                        *config.Config
 }
@@ -369,6 +370,7 @@ func NewOpenAIGatewayHandler(
 		opsService:               opsService,
 		concurrencyHelper:        NewConcurrencyHelper(concurrencyService, SSEPingFormatComment, pingInterval),
 		imageLimiter:             &imageConcurrencyLimiter{},
+		largeRequestLimiter:      &imageConcurrencyLimiter{},
 		maxAccountSwitches:       maxAccountSwitches,
 		cfg:                      cfg,
 	}
@@ -408,9 +410,15 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	if !h.ensureResponsesDependencies(c, reqLog) {
 		return
 	}
+	stageTiming := newOpenAIResponsesStageTiming(requestStart)
+	defer func() {
+		logOpenAIResponsesStageTiming(c, reqLog, stageTiming, streamStarted, h.largeRequestThresholdBytes())
+	}()
 
 	// Read request body
+	bodyReadStartedAt := time.Now()
 	body, err := readLenientJSONRequestBodyWithPrealloc(c.Request, h.cfg)
+	stageTiming.handlerBodyReadMs = time.Since(bodyReadStartedAt).Milliseconds()
 	if err != nil {
 		if maxErr, ok := extractMaxBytesError(err); ok {
 			h.errorResponse(c, http.StatusRequestEntityTooLarge, "invalid_request_error", buildBodyTooLargeMessage(maxErr.Limit))
@@ -424,6 +432,15 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	if len(body) == 0 {
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Request body is empty")
 		return
+	}
+	stageTiming.bodyBytes = len(body)
+	largeRequestRelease, largeRequestAcquired := h.acquireLargeRequestSlotAfterRead(c, len(body))
+	if !largeRequestAcquired {
+		stageTiming.outcome = "large_request_limited"
+		return
+	}
+	if largeRequestRelease != nil {
+		defer largeRequestRelease()
 	}
 
 	setOpsRequestContext(c, "", false)
@@ -459,6 +476,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		return
 	}
 	reqModel := modelResult.String()
+	stageTiming.model = reqModel
 	ensureCompositeTargetPlatform(c, apiKey, reqModel)
 	if !openAICompatibleTextTargetAllowed(c, apiKey, reqModel) {
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Model is not supported by this OpenAI-compatible endpoint for composite groups")
@@ -488,6 +506,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", invalidStreamFieldTypeMessage)
 		return
 	}
+	stageTiming.stream = reqStream
 	if _, err := service.ValidateOpenAIServiceTierField(body); err != nil {
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", err.Error())
 		return
@@ -533,7 +552,10 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	setOpsRequestContext(c, reqModel, reqStream)
 	setOpsEndpointContext(c, "", int16(service.RequestTypeFromLegacy(reqStream, false)))
 
-	if decision := h.checkSecurityAudit(c, reqLog, apiKey, subject, service.ContentModerationProtocolOpenAIResponses, reqModel, body); decision != nil && !decision.AllowNextStage {
+	securityAuditStartedAt := time.Now()
+	decision := h.checkSecurityAudit(c, reqLog, apiKey, subject, service.ContentModerationProtocolOpenAIResponses, reqModel, body)
+	stageTiming.securityAuditMs = time.Since(securityAuditStartedAt).Milliseconds()
+	if decision != nil && !decision.AllowNextStage {
 		h.openAISecurityAuditError(c, decision)
 		return
 	}
@@ -585,6 +607,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 
 	service.SetOpsLatencyMs(c, service.OpsAuthLatencyMsKey, time.Since(requestStart).Milliseconds())
 	routingStart := time.Now()
+	stageTiming.outcome = "routing_error"
 
 	userReleaseFunc, acquired := h.acquireResponsesUserSlot(c, subject.UserID, subject.Concurrency, reqStream, &streamStarted, reqLog)
 	if !acquired {
@@ -757,6 +780,8 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		}
 
 		// Forward request
+		stageTiming.upstreamAttempts++
+		stageTiming.outcome = "upstream_error"
 		service.SetOpsLatencyMs(c, service.OpsRoutingLatencyMsKey, time.Since(routingStart).Milliseconds())
 		forwardStart := time.Now()
 		// 用扣除非语义心跳字节的口径快照：心跳注释不构成语义响应，
@@ -804,6 +829,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
 			sessionID := service.ExtractClientSessionID(c)
 			cyberBlocked := service.GetOpsCyberPolicy(c) != nil
+			latencyBreakdown := buildOpenAIResponsesLatencyBreakdown(c, stageTiming)
 			h.submitOpenAIUsageRecordTask(c.Request.Context(), res, func(ctx context.Context) {
 				if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
 					Result:             res,
@@ -823,6 +849,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 					PricingAt:          pricingAt,
 					CyberBlocked:       cyberBlocked,
 					NativeCompactionV2: nativeV2,
+					LatencyBreakdown:   latencyBreakdown,
 				}); err != nil {
 					logger.L().With(
 						zap.String("component", "handler.openai_gateway.responses"),
@@ -837,6 +864,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		}
 		if err != nil {
 			if result != nil && result.ClientDisconnect {
+				stageTiming.outcome = "client_disconnected"
 				reqLog.Info("openai.client_disconnected",
 					zap.Int64("account_id", account.ID),
 					zap.Error(err),
@@ -845,6 +873,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 				return
 			}
 			if failoverClientGone(c) {
+				stageTiming.outcome = "client_disconnected"
 				reqLog.Info("openai.client_disconnected",
 					zap.Int64("account_id", account.ID),
 					zap.Error(err),
@@ -953,6 +982,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 					zap.Bool("upstream_error_response_already_written", upstreamErrorAlreadyCommunicated),
 					zap.Error(err),
 				}
+				stageTiming.outcome = "partial_error"
 				submitResponsesUsage(result)
 				if shouldLogOpenAIForwardFailureAsWarn(c, wroteFallback) {
 					reqLog.Warn("openai.forward_failed", fields...)
@@ -972,7 +1002,14 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, forwardModel, requireCompact, result), openAIForwardSucceededForScheduling(result), nil)
 		}
 
+		if err == nil {
+			stageTiming.outcome = "success"
+			stageTiming.streamCompleted = !reqStream || result != nil
+		} else {
+			stageTiming.outcome = "partial_error"
+		}
 		// 使用量记录通过有界 worker 池提交，避免请求热路径创建无界 goroutine。
+		// 先冻结最终 outcome/stream_completed，确保详情与阶段日志口径一致。
 		submitResponsesUsage(result)
 		reqLog.Debug("openai.request_completed",
 			zap.Int64("account_id", account.ID),

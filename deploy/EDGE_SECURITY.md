@@ -15,6 +15,15 @@ terminate healthy long generations and streams.
   image, video, and batch-image endpoints.
 - `gateway.text_max_body_size: 33554432` limits the known pure-text
   `/embeddings` and `/alpha/search` endpoints to 32 MiB.
+- `gateway.large_request_concurrency` independently protects OpenAI-compatible
+  `/responses` bodies at or above 64 MiB. The default is eight active large
+  requests per process with immediate HTTP 429 load shedding; this is a
+  concurrency guard, not a replacement for the 256 MiB absolute body limit.
+  Unknown-length uploads are probed only up to the threshold before admission;
+  compressed requests reserve a slot before reading, even when compressed size
+  is small. Below-threshold uploads still require edge connection/rate limits.
+  Eight slots are a starting point for an 8 GiB host, not a memory guarantee:
+  parsing, rewriting, other traffic and database processes also consume memory.
 - H2C defaults to 50 concurrent streams per connection, a 2 MiB connection
   upload window, and a 512 KiB stream upload window.
 - Invalid credential abuse is limited in process by trusted client IP (IPv6

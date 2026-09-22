@@ -180,8 +180,12 @@ type UsageLog struct {
 	NativeCompactionV2 bool
 	DurationMs         *int
 	FirstTokenMs       *int
-	UserAgent          *string
-	IPAddress          *string
+	// LatencyBreakdown stores an optional request-stage timing snapshot. It is
+	// populated only by handlers that can measure the stages consistently and
+	// is intentionally loaded only by single-record detail queries.
+	LatencyBreakdown *UsageLatencyBreakdown
+	UserAgent        *string
+	IPAddress        *string
 	// SessionID is the explicit client-provided request correlation identifier
 	// (e.g. the session_id / X-Session-Id headers). Nil when the client sent no
 	// valid session header. It is never derived from prompt_cache_key or content.
@@ -215,6 +219,34 @@ type UsageLog struct {
 	Account      *Account
 	Group        *Group
 	Subscription *UserSubscription
+}
+
+// UsageLatencyBreakdown is the persisted observability snapshot for one usage
+// record. Pointer fields preserve the distinction between an observed 0ms
+// phase and a phase that was not measured.
+type UsageLatencyBreakdown struct {
+	RequestTotalMs              *int64   `json:"request_total_ms,omitempty"`
+	HandlerTotalMs              *int64   `json:"handler_total_ms,omitempty"`
+	IngressBodyWaitMs           *int64   `json:"ingress_body_wait_ms,omitempty"`
+	IngressBodyReadMs           *int64   `json:"ingress_body_read_ms,omitempty"`
+	IngressBodyBytes            *int64   `json:"ingress_body_bytes,omitempty"`
+	IngressBodyMiBPerSecond     *float64 `json:"ingress_body_mib_per_second,omitempty"`
+	HandlerBodyReadMs           *int64   `json:"handler_body_read_ms,omitempty"`
+	SecurityAuditMs             *int64   `json:"security_audit_ms,omitempty"`
+	PreflightMs                 *int64   `json:"preflight_ms,omitempty"`
+	RoutingMs                   *int64   `json:"routing_ms,omitempty"`
+	LargeRequestWaitMs          *int64   `json:"large_request_wait_ms,omitempty"`
+	UpstreamConnectionAcquireMs *int64   `json:"upstream_connection_acquire_ms,omitempty"`
+	UpstreamRequestWriteMs      *int64   `json:"upstream_request_write_ms,omitempty"`
+	UpstreamFirstByteWaitMs     *int64   `json:"upstream_first_byte_wait_ms,omitempty"`
+	UpstreamResponseHeaderMs    *int64   `json:"upstream_response_header_ms,omitempty"`
+	TimeToFirstTokenMs          *int64   `json:"time_to_first_token_ms,omitempty"`
+	ResponseStreamMs            *int64   `json:"response_stream_ms,omitempty"`
+	UpstreamAttempts            int      `json:"upstream_attempts,omitempty"`
+	UpstreamConnectionReused    *bool    `json:"upstream_connection_reused,omitempty"`
+	IngressBodyComplete         *bool    `json:"ingress_body_complete,omitempty"`
+	StreamCompleted             *bool    `json:"stream_completed,omitempty"`
+	Outcome                     string   `json:"outcome,omitempty"`
 }
 
 func (u *UsageLog) TotalTokens() int {

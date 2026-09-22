@@ -463,6 +463,12 @@ func (_c *UsageLogCreate) SetNillableFirstTokenMs(v *int) *UsageLogCreate {
 	return _c
 }
 
+// SetLatencyBreakdown sets the "latency_breakdown" field.
+func (_c *UsageLogCreate) SetLatencyBreakdown(v map[string]interface{}) *UsageLogCreate {
+	_c.mutation.SetLatencyBreakdown(v)
+	return _c
+}
+
 // SetUserAgent sets the "user_agent" field.
 func (_c *UsageLogCreate) SetUserAgent(v string) *UsageLogCreate {
 	_c.mutation.SetUserAgent(v)
@@ -1082,6 +1088,10 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.FirstTokenMs(); ok {
 		_spec.SetField(usagelog.FieldFirstTokenMs, field.TypeInt, value)
 		_node.FirstTokenMs = &value
+	}
+	if value, ok := _c.mutation.LatencyBreakdown(); ok {
+		_spec.SetField(usagelog.FieldLatencyBreakdown, field.TypeJSON, value)
+		_node.LatencyBreakdown = value
 	}
 	if value, ok := _c.mutation.UserAgent(); ok {
 		_spec.SetField(usagelog.FieldUserAgent, field.TypeString, value)
@@ -1863,6 +1873,24 @@ func (u *UsageLogUpsert) AddFirstTokenMs(v int) *UsageLogUpsert {
 // ClearFirstTokenMs clears the value of the "first_token_ms" field.
 func (u *UsageLogUpsert) ClearFirstTokenMs() *UsageLogUpsert {
 	u.SetNull(usagelog.FieldFirstTokenMs)
+	return u
+}
+
+// SetLatencyBreakdown sets the "latency_breakdown" field.
+func (u *UsageLogUpsert) SetLatencyBreakdown(v map[string]interface{}) *UsageLogUpsert {
+	u.Set(usagelog.FieldLatencyBreakdown, v)
+	return u
+}
+
+// UpdateLatencyBreakdown sets the "latency_breakdown" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateLatencyBreakdown() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldLatencyBreakdown)
+	return u
+}
+
+// ClearLatencyBreakdown clears the value of the "latency_breakdown" field.
+func (u *UsageLogUpsert) ClearLatencyBreakdown() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldLatencyBreakdown)
 	return u
 }
 
@@ -2817,6 +2845,27 @@ func (u *UsageLogUpsertOne) UpdateFirstTokenMs() *UsageLogUpsertOne {
 func (u *UsageLogUpsertOne) ClearFirstTokenMs() *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.ClearFirstTokenMs()
+	})
+}
+
+// SetLatencyBreakdown sets the "latency_breakdown" field.
+func (u *UsageLogUpsertOne) SetLatencyBreakdown(v map[string]interface{}) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetLatencyBreakdown(v)
+	})
+}
+
+// UpdateLatencyBreakdown sets the "latency_breakdown" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateLatencyBreakdown() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateLatencyBreakdown()
+	})
+}
+
+// ClearLatencyBreakdown clears the value of the "latency_breakdown" field.
+func (u *UsageLogUpsertOne) ClearLatencyBreakdown() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearLatencyBreakdown()
 	})
 }
 
@@ -3973,6 +4022,27 @@ func (u *UsageLogUpsertBulk) UpdateFirstTokenMs() *UsageLogUpsertBulk {
 func (u *UsageLogUpsertBulk) ClearFirstTokenMs() *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.ClearFirstTokenMs()
+	})
+}
+
+// SetLatencyBreakdown sets the "latency_breakdown" field.
+func (u *UsageLogUpsertBulk) SetLatencyBreakdown(v map[string]interface{}) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetLatencyBreakdown(v)
+	})
+}
+
+// UpdateLatencyBreakdown sets the "latency_breakdown" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateLatencyBreakdown() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateLatencyBreakdown()
+	})
+}
+
+// ClearLatencyBreakdown clears the value of the "latency_breakdown" field.
+func (u *UsageLogUpsertBulk) ClearLatencyBreakdown() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearLatencyBreakdown()
 	})
 }
 

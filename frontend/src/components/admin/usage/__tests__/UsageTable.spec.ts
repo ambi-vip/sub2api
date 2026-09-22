@@ -69,8 +69,11 @@ const messages: Record<string, string> = {
 	'usage.requestedModel': 'Requested',
 	'usage.sentUpstreamModel': 'Sent upstream',
 	'usage.upstreamResponseModel': 'Upstream response',
-	'usage.modelVariant': 'Possible version variant',
-	'usage.modelMismatch': 'Different model',
+  'usage.modelVariant': 'Possible version variant',
+  'usage.modelMismatch': 'Different model',
+  'usage.latencyFirstToken': 'First',
+  'usage.latencyDuration': 'Total',
+  'usage.latencyDetail.open': 'View detailed timing',
 }
 
 vi.mock('vue-i18n', async () => {
@@ -93,6 +96,7 @@ const DataTableStub = {
         <slot name="cell-billing_mode" :row="row" />
         <slot name="cell-tokens" :row="row" />
         <slot name="cell-cost" :row="row" />
+        <slot name="cell-latency" :row="row" />
         <slot name="cell-request_id" :row="row" />
         <slot name="cell-upstream_request_id" :row="row" />
       </div>
@@ -602,6 +606,42 @@ describe('admin UsageTable tooltip', () => {
     expect(text).toContain('Per-image price')
     expect(text).toContain('not recorded')
     expect(text).not.toContain('(2K)')
+  })
+})
+
+describe('admin UsageTable latency details', () => {
+  it('keeps the compact latency summary and emits the selected row when clicked', async () => {
+    const row = {
+      ...baseImageRow,
+      request_id: 'req-admin-latency-detail',
+      first_token_ms: 812,
+      duration_ms: 2450,
+    }
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [row],
+        loading: false,
+        columns: [{ key: 'latency', label: 'Latency' }],
+      },
+      global: {
+        stubs: {
+          DataTable: DataTableStub,
+          EmptyState: true,
+          Icon: true,
+          Teleport: true,
+        },
+      },
+    })
+
+    const button = wrapper.get('button[title="View detailed timing"]')
+    expect(button.text()).toContain('First')
+    expect(button.text()).toContain('812ms')
+    expect(button.text()).toContain('Total')
+    expect(button.text()).toContain('2.45s')
+
+    await button.trigger('click')
+
+    expect(wrapper.emitted('detail')).toEqual([[row]])
   })
 })
 

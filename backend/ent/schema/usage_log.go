@@ -132,6 +132,10 @@ func (UsageLog) Fields() []ent.Field {
 		field.Int("first_token_ms").
 			Optional().
 			Nillable(),
+		field.JSON("latency_breakdown", map[string]any{}).
+			Optional().
+			SchemaType(map[string]string{dialect.Postgres: "jsonb"}).
+			Comment("Optional request-stage latency snapshot; fetched only for usage detail"),
 		field.String("user_agent").
 			MaxLen(512).
 			Optional().

@@ -233,7 +233,12 @@
 
         <!-- 合并首字/总耗时的健康度列：左侧色条上端随首字档、下端随总耗时档，中段(40%-60%)短渐变过渡，便于纵向扫视整体健康状况 -->
         <template #cell-latency="{ row }">
-          <div class="flex items-stretch gap-2">
+          <button
+            type="button"
+            class="-m-1 flex items-stretch gap-2 rounded-lg p-1 text-left transition-colors hover:bg-primary-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/30 dark:hover:bg-primary-900/20"
+            :title="t('usage.latencyDetail.open')"
+            @click="emit('detail', row)"
+          >
             <span
               class="w-1 shrink-0 rounded-full"
               :class="row.first_token_ms != null
@@ -248,7 +253,7 @@
               <span class="text-gray-400 dark:text-gray-500">{{ t('usage.latencyDuration') }}</span>
               <span class="font-medium tabular-nums" :class="LATENCY_TEXT_CLASSES[durationSeverity(row.duration_ms ?? 0)]">{{ formatDuration(row.duration_ms) }}</span>
             </div>
-          </div>
+          </button>
         </template>
 
         <template #cell-created_at="{ value }">
@@ -610,6 +615,7 @@ const props = withDefaults(defineProps<Props>(), {
 })
 const emit = defineEmits<{
   userClick: [userID: number, email?: string]
+  detail: [row: AdminUsageLog]
   sort: [key: string, order: 'asc' | 'desc']
   ipGeoBatchFailed: []
 }>()

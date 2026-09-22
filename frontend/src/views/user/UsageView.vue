@@ -187,6 +187,7 @@
           default-sort-key="created_at"
           default-sort-order="desc"
           @sort="handleSort"
+          @detail="openUsageDetail"
           @ipGeoBatchFailed="handleIpGeoBatchFailed"
         />
 
@@ -214,6 +215,13 @@
         @ipGeoBatchFailed="handleIpGeoBatchFailed"
       />
     </div>
+
+    <UsageDetailModal
+      :show="usageDetailVisible"
+      :detail="usageDetail"
+      :loading="usageDetailLoading"
+      @close="usageDetailVisible = false"
+    />
   </AppLayout>
 
 </template>
@@ -230,6 +238,7 @@ import Select, { type SelectOption } from '@/components/common/Select.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import UsageStatsCards from '@/components/admin/usage/UsageStatsCards.vue'
 import UsageTable from '@/components/admin/usage/UsageTable.vue'
+import UsageDetailModal from '@/components/admin/usage/UsageDetailModal.vue'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'
 import GroupDistributionChart from '@/components/charts/GroupDistributionChart.vue'
 import EndpointDistributionChart from '@/components/charts/EndpointDistributionChart.vue'
@@ -263,6 +272,9 @@ type EndpointSource = 'inbound' | 'upstream' | 'path'
 
 const usageStats = ref<UsageStatsResponse | null>(null)
 const usageLogs = ref<UsageLog[]>([])
+const usageDetail = ref<UsageLog | null>(null)
+const usageDetailVisible = ref(false)
+const usageDetailLoading = ref(false)
 const trendData = ref<TrendDataPoint[]>([])
 const requestedModelStats = ref<ModelStat[]>([])
 const groupStats = ref<GroupStat[]>([])
@@ -462,6 +474,19 @@ const loadLogs = async () => {
     }
   } finally {
     if (abortController === controller) loading.value = false
+  }
+}
+
+const openUsageDetail = async (row: UsageLog) => {
+  usageDetail.value = row
+  usageDetailVisible.value = true
+  usageDetailLoading.value = true
+  try {
+    usageDetail.value = await usageAPI.getById(row.id)
+  } catch {
+    appStore.showError(t('usage.latencyDetail.loadFailed'))
+  } finally {
+    usageDetailLoading.value = false
   }
 }
 

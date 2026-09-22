@@ -103,6 +103,7 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			sqlmock.AnyArg(), // session_id
 			log.NativeCompactionV2,
 			createdAt,
+			sqlmock.AnyArg(), // latency_breakdown
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at"}).AddRow(int64(99), createdAt))
 
@@ -198,6 +199,7 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			sqlmock.AnyArg(), // session_id
 			log.NativeCompactionV2,
 			createdAt,
+			sqlmock.AnyArg(), // latency_breakdown
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at"}).AddRow(int64(100), createdAt))
 
@@ -278,12 +280,30 @@ func TestPrepareUsageLogInsert_PersistsNativeCompactionV2WithoutChangingRequestT
 	prepared := prepareUsageLogInsert(log)
 
 	require.Len(t, prepared.args, len(usageLogInsertArgTypes))
-	require.Equal(t, "boolean", usageLogInsertArgTypes[len(usageLogInsertArgTypes)-2])
-	require.Equal(t, true, prepared.args[len(prepared.args)-2])
+	require.Equal(t, "boolean", usageLogInsertArgTypes[len(usageLogInsertArgTypes)-3])
+	require.Equal(t, true, prepared.args[len(prepared.args)-3])
 	require.Equal(t, int16(service.RequestTypeStream), prepared.args[30])
 	require.Equal(t, service.RequestTypeStream, log.RequestType)
 	require.True(t, log.Stream)
 	require.False(t, log.OpenAIWSMode)
+}
+
+func TestUsageLogLatencyBreakdownIsDetailOnlyAndRoundTripsJSON(t *testing.T) {
+	requestTotalMs := int64(3210)
+	connectionReused := true
+	breakdown := &service.UsageLatencyBreakdown{
+		RequestTotalMs:           &requestTotalMs,
+		UpstreamAttempts:         2,
+		UpstreamConnectionReused: &connectionReused,
+		Outcome:                  "success",
+	}
+
+	payload, ok := usageLatencyBreakdownJSON(breakdown).(string)
+	require.True(t, ok)
+	got := usageLatencyBreakdownFromNullJSON(sql.NullString{String: payload, Valid: true})
+	require.Equal(t, breakdown, got)
+	require.NotContains(t, usageLogSelectColumns, "latency_breakdown")
+	require.Contains(t, usageLogDetailSelectColumns, "latency_breakdown")
 }
 
 func TestPrepareUsageLogInsert_PersistsImageSizeMetadata(t *testing.T) {

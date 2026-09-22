@@ -538,6 +538,25 @@ gateway:
     # Max image requests waiting in this process when overflow_mode=wait, 0=unlimited
     # wait 模式当前进程允许排队等待的图片请求数，0=不限制
     max_waiting_requests: 100
+  # Large OpenAI Responses body concurrency protection (process-local).
+  # 大体积 OpenAI Responses 请求独立并发保护（进程级；多实例总上限约为实例数×该值）。
+  large_request_concurrency:
+    # Enabled by default to protect memory and upstream connections from simultaneous 64+ MiB requests.
+    # 默认启用，避免多个 64 MiB 以上请求同时占用大量内存和上游连接。
+    enabled: true
+    # Decoded body size threshold in bytes (64 MiB).
+    # 解码后请求体阈值（字节，默认 64 MiB）。
+    threshold_bytes: 67108864
+    # Max large Responses requests handled concurrently by this process.
+    # 当前进程最多同时处理的大请求数。
+    max_concurrent_requests: 8
+    # reject sheds load immediately; wait keeps complete request bodies in memory while queued.
+    # reject 立即拒绝；wait 会在排队期间继续持有完整请求体内存。
+    overflow_mode: "reject"
+    # Used only by wait mode.
+    # 仅 wait 模式使用。
+    wait_timeout_seconds: 15
+    max_waiting_requests: 2
   # SSE max line size in bytes (default: 40MB)
   # SSE 单行最大字节数（默认 40MB）
   max_line_size: 41943040

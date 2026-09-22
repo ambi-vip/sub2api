@@ -132,6 +132,7 @@
             :default-sort-key="'created_at'"
             :default-sort-order="'desc'"
             @sort="handleSort"
+            @detail="openUsageDetail"
             @userClick="handleUserClick"
             @ipGeoBatchFailed="handleIpGeoBatchFailed"
           />
@@ -164,6 +165,12 @@
         </div>
       </div>
       <OpsErrorDetailModal v-model:show="showErrorModal" :error-id="selectedErrorId" :error-type="'request'" />
+      <UsageDetailModal
+        :show="usageDetailVisible"
+        :detail="usageDetail"
+        :loading="usageDetailLoading"
+        @close="usageDetailVisible = false"
+      />
     </div>
   </AppLayout>
   <UsageExportProgress :show="exportProgress.show" :progress="exportProgress.progress" :current="exportProgress.current" :total="exportProgress.total" :estimated-time="exportProgress.estimatedTime" @cancel="cancelExport" />
@@ -195,6 +202,7 @@ import { resolveUsageRequestType, requestTypeToLegacyStream } from '@/utils/usag
 import AppLayout from '@/components/layout/AppLayout.vue'; import Pagination from '@/components/common/Pagination.vue'; import Select from '@/components/common/Select.vue'; import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import UsageStatsCards from '@/components/admin/usage/UsageStatsCards.vue'; import UsageFilters from '@/components/admin/usage/UsageFilters.vue'
 import UsageTable from '@/components/admin/usage/UsageTable.vue'; import UsageExportProgress from '@/components/admin/usage/UsageExportProgress.vue'
+import UsageDetailModal from '@/components/admin/usage/UsageDetailModal.vue'
 import UserTokenRanking from '@/components/admin/usage/UserTokenRanking.vue'
 import UsageCleanupDialog from '@/components/admin/usage/UsageCleanupDialog.vue'
 import UserBalanceHistoryModal from '@/components/admin/user/UserBalanceHistoryModal.vue'
@@ -214,6 +222,9 @@ type EndpointSource = 'inbound' | 'upstream' | 'path'
 type ModelDistributionSource = 'requested' | 'upstream' | 'mapping'
 const route = useRoute()
 const usageStats = ref<AdminUsageStatsResponse | null>(null); const usageLogs = ref<AdminUsageLog[]>([]); const loading = ref(false); const exporting = ref(false)
+const usageDetail = ref<AdminUsageLog | null>(null)
+const usageDetailVisible = ref(false)
+const usageDetailLoading = ref(false)
 const trendData = ref<TrendDataPoint[]>([]); const requestedModelStats = ref<ModelStat[]>([]); const upstreamModelStats = ref<ModelStat[]>([]); const mappingModelStats = ref<ModelStat[]>([]); const groupStats = ref<GroupStat[]>([]); const chartsLoading = ref(false); const modelStatsLoading = ref(false); const granularity = ref<'day' | 'hour'>('hour')
 const modelDistributionMetric = ref<DistributionMetric>('tokens')
 const modelDistributionSource = ref<ModelDistributionSource>('requested')
@@ -262,6 +273,19 @@ const handleUserClick = async (userId: number) => {
     showBalanceHistoryModal.value = true
   } catch {
     appStore.showError(t('admin.usage.failedToLoadUser'))
+  }
+}
+
+const openUsageDetail = async (row: AdminUsageLog) => {
+  usageDetail.value = row
+  usageDetailVisible.value = true
+  usageDetailLoading.value = true
+  try {
+    usageDetail.value = await adminUsageAPI.getById(row.id)
+  } catch {
+    appStore.showError(t('usage.latencyDetail.loadFailed'))
+  } finally {
+    usageDetailLoading.value = false
   }
 }
 
