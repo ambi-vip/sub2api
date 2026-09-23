@@ -713,6 +713,8 @@ export default {
       customMenu: {
         title: '自定义菜单页面',
         description: '添加自定义 iframe 页面到侧边栏导航。每个页面可以设置为普通用户或管理员可见。',
+        modelTraceEnabled: '显示 ModelTrace 检测菜单',
+        modelTraceEnabledHint: '开启后在管理员侧边栏显示独立的 ModelTrace 检测页面；关闭后仅隐藏入口。',
         itemLabel: '菜单项 #{n}',
         name: '菜单名称',
         namePlaceholder: '如：帮助中心',

@@ -335,6 +335,7 @@ type SystemSettings struct {
 	ModelPlazaEnabled       bool   `json:"model_plaza_enabled"`
 	ModelPlazaRequireAuth   bool   `json:"model_plaza_require_auth"`
 	ModelPlazaDescription   string `json:"model_plaza_description"`
+	ModelTraceEnabled       bool   `json:"modeltrace_enabled"`
 	PluginManagementEnabled bool   `json:"plugin_management_enabled"`
 
 	// 风控中心功能开关
@@ -444,6 +445,7 @@ type PublicSettings struct {
 
 	ModelPlazaEnabled       bool `json:"model_plaza_enabled"`
 	ModelPlazaRequireAuth   bool `json:"model_plaza_require_auth"`
+	ModelTraceEnabled       bool `json:"modeltrace_enabled"`
 	PluginManagementEnabled bool `json:"plugin_management_enabled"`
 
 	AffiliateEnabled bool `json:"affiliate_enabled"`

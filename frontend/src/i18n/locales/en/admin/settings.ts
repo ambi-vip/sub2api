@@ -718,6 +718,8 @@ export default {
       customMenu: {
         title: 'Custom Menu Pages',
         description: 'Add custom iframe pages to the sidebar navigation. Each page can be visible to regular users or administrators.',
+        modelTraceEnabled: 'Show ModelTrace Detection Menu',
+        modelTraceEnabledHint: 'When enabled, administrators get a standalone ModelTrace detection page in the sidebar. Turning it off only hides the entry.',
         itemLabel: 'Menu Item #{n}',
         name: 'Menu Name',
         namePlaceholder: 'e.g. Help Center',

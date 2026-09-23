@@ -6800,6 +6800,18 @@
               </p>
             </div>
             <div class="space-y-4 p-6">
+              <div class="flex items-center justify-between gap-4 rounded-lg border border-primary-100 bg-primary-50/60 p-4 dark:border-primary-900/40 dark:bg-primary-900/10">
+                <div>
+                  <label class="text-sm font-medium text-gray-900 dark:text-white">
+                    {{ t('admin.settings.customMenu.modelTraceEnabled') }}
+                  </label>
+                  <p class="mt-0.5 text-xs text-gray-600 dark:text-gray-400">
+                    {{ t('admin.settings.customMenu.modelTraceEnabledHint') }}
+                  </p>
+                </div>
+                <Toggle v-model="form.modeltrace_enabled" />
+              </div>
+
               <!-- Existing menu items -->
               <div
                 v-for="(item, index) in form.custom_menu_items"
@@ -9860,6 +9872,7 @@ const form = reactive<SettingsForm>({
     sort_order: number;
     hide_open_button?: boolean;
   }>,
+  modeltrace_enabled: false,
   custom_endpoints: [] as Array<{
     name: string;
     endpoint: string;
@@ -11803,6 +11816,7 @@ async function saveSettings() {
       model_plaza_enabled: form.model_plaza_enabled,
       model_plaza_require_auth: form.model_plaza_require_auth,
       model_plaza_description: form.model_plaza_description,
+      modeltrace_enabled: form.modeltrace_enabled,
       plugin_management_enabled: form.plugin_management_enabled,
       // Affiliate (邀请返利) feature switch
       affiliate_enabled: form.affiliate_enabled,
