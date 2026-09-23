@@ -29,7 +29,9 @@ import type {
   OllamaCloudUsageSettings,
   OllamaCloudUsageState,
   GrokMediaEligibilityMode,
-  GrokMediaEligibilityState
+  GrokMediaEligibilityState,
+  OpenCodeGoUsageSettings,
+  OpenCodeGoUsageState
 } from '@/types'
 
 /**
@@ -337,6 +339,60 @@ export async function refreshCodexTickets(
     models && models.length ? { models } : {}
   )
   return data.codex_turn_tickets
+}
+
+export interface ModelTraceCandidate {
+  model: string
+  display_name: string
+  family: string
+  family_name: string
+  probability: number
+  conditional_probability: number
+  profile_similarity: number
+  score: number
+}
+
+export interface ModelTraceDetectionResponse {
+  scope: 'all' | 'selected' | 'group'
+  total: number
+  detected: number
+  failed: number
+  method: string
+  predictions: Array<{
+    prediction: string
+    prediction_name: string
+    count: number
+    average_probability: number
+  }>
+  results: Array<{
+    account_id: number
+    account_name: string
+    platform: string
+    account_type: string
+    model_id?: string
+    status: 'success' | 'failed'
+    error?: string
+    errors?: string[]
+    attempts: number
+    used_outputs: number
+    latency_ms: number
+    prediction?: string
+    prediction_name?: string
+    probability?: number
+    family_prediction?: string
+    family_name?: string
+    family_probability?: number
+    candidates?: ModelTraceCandidate[]
+  }>
+}
+
+export async function detectModelTrace(payload: {
+  scope: 'all' | 'selected' | 'group'
+  account_ids?: number[]
+  group_id?: number
+}): Promise<ModelTraceDetectionResponse> {
+  const { data } = await apiClient.post<ModelTraceDetectionResponse>('/admin/accounts/modeltrace/detect', payload, { timeout: 0 })
+  return data
 }
 
 /**
@@ -1115,6 +1171,31 @@ export async function refreshOllamaCloudUsage(id: number): Promise<OllamaCloudUs
   return data
 }
 
+export async function getOpenCodeGoUsageSettings(): Promise<OpenCodeGoUsageSettings> {
+  const { data } = await apiClient.get<OpenCodeGoUsageSettings>('/admin/accounts/opencode-go-usage/settings')
+  return data
+}
+
+export async function updateOpenCodeGoUsageSettings(settings: OpenCodeGoUsageSettings): Promise<OpenCodeGoUsageSettings> {
+  const { data } = await apiClient.put<OpenCodeGoUsageSettings>('/admin/accounts/opencode-go-usage/settings', settings)
+  return data
+}
+
+export async function getOpenCodeGoUsage(id: number): Promise<OpenCodeGoUsageState> {
+  const { data } = await apiClient.get<OpenCodeGoUsageState>(`/admin/accounts/${id}/opencode-go-usage`)
+  return data
+}
+
+export async function setOpenCodeGoUsageAutoRefresh(id: number, enabled: boolean): Promise<OpenCodeGoUsageState> {
+  const { data } = await apiClient.put<OpenCodeGoUsageState>(`/admin/accounts/${id}/opencode-go-usage/auto-refresh`, { enabled })
+  return data
+}
+
+export async function refreshOpenCodeGoUsage(id: number): Promise<OpenCodeGoUsageState> {
+  const { data } = await apiClient.post<OpenCodeGoUsageState>(`/admin/accounts/${id}/opencode-go-usage/refresh`)
+  return data
+}
+
 export const accountsAPI = {
   list,
   listWithEtag,
@@ -1179,7 +1260,13 @@ export const accountsAPI = {
   deleteOllamaCloudUsageSession,
   setOllamaCloudUsageAutoRefresh,
   refreshOllamaCloudUsage,
-  refreshCodexTickets
+  refreshCodexTickets,
+  getOpenCodeGoUsageSettings,
+  updateOpenCodeGoUsageSettings,
+  getOpenCodeGoUsage,
+  setOpenCodeGoUsageAutoRefresh,
+  refreshOpenCodeGoUsage,
+  detectModelTrace
 }
 
 export default accountsAPI

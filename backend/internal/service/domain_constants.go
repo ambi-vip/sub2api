@@ -570,6 +570,9 @@ const (
 	// SettingKeyOllamaCloudUsageSettings stores the opt-in global runner switch and interval.
 	SettingKeyOllamaCloudUsageSettings = "ollama_cloud_usage_settings"
 
+	// SettingKeyOpenCodeGoUsageSettings stores the opt-in global runner switch and interval.
+	SettingKeyOpenCodeGoUsageSettings = "opencode_go_usage_settings"
+
 	// =========================
 	// Overload Cooldown (529)
 	// =========================
@@ -719,6 +722,12 @@ const (
 	SettingKeyOpenAICodexTicketHarvestProxyURL = "openai_codex_ticket_harvest_proxy_url"
 	// SettingKeyOpenAICodexTicketModels Codex 292 打票模型列表，JSON 数组格式；缺失时回退配置文件。
 	SettingKeyOpenAICodexTicketModels = "openai_codex_ticket_models"
+	// SettingKeyClaudeCodeClientVersion controls the outbound Claude Code CLI version override.
+	SettingKeyClaudeCodeClientVersion = "claude_code_client_version"
+	// SettingKeyClaudeCodeClientVersionSynced is written by the automatic sync task.
+	SettingKeyClaudeCodeClientVersionSynced = "claude_code_client_version_synced"
+	// SettingKeyClaudeCodeVersionAutoSyncEnabled controls Claude Code version syncing.
+	SettingKeyClaudeCodeVersionAutoSyncEnabled = "claude_code_version_auto_sync_enabled"
 	// SettingKeyOpenAIAllowClaudeCodeCodexPlugin 已废弃：历史全局开关只作为升级迁移输入读取。
 	// 迁移后等价规则写入 SettingKeyCodexCLIOnlyWhitelist，不再参与运行时判定。
 	SettingKeyOpenAIAllowClaudeCodeCodexPlugin = "openai_allow_claude_code_codex_plugin"

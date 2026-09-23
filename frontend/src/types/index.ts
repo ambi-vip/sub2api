@@ -1155,6 +1155,31 @@ export interface OllamaCloudUsageSettings {
   debounce_minutes: number
 }
 
+export type OpenCodeGoUsageStatus = 'ok' | 'unauthorized' | 'failed'
+export interface OpenCodeGoUsageWindow { status?: string; percent: number; resets_at?: string }
+export interface OpenCodeGoUsageData { rolling?: OpenCodeGoUsageWindow; weekly?: OpenCodeGoUsageWindow; monthly?: OpenCodeGoUsageWindow }
+export interface OpenCodeGoUsageSnapshot {
+  status: OpenCodeGoUsageStatus
+  data?: OpenCodeGoUsageData
+  fetched_at?: string
+  last_attempt_at?: string
+  next_refresh_at?: string
+  failure_count?: number
+  http_status?: number
+  last_error?: string
+}
+export interface OpenCodeGoUsageState {
+  account_id: number
+  eligible: boolean
+  auto_refresh_enabled: boolean
+  snapshot?: OpenCodeGoUsageSnapshot
+}
+export interface OpenCodeGoUsageSettings {
+  enabled: boolean
+  interval_minutes: number
+  debounce_minutes: number
+}
+
 export interface Account {
   id: number
   name: string
@@ -1168,6 +1193,7 @@ export interface Account {
   credentials?: Record<string, unknown>
   credentials_status?: Record<string, boolean>
   ollama_cloud_usage?: OllamaCloudUsageState
+  opencode_go_usage?: OpenCodeGoUsageState
   codex_turn_tickets?: Array<{
     model: string
     length?: number

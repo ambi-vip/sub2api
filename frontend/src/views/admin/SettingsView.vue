@@ -5012,6 +5012,52 @@
             </div>
           </div>
 
+          <!-- OpenCode Go Usage Settings -->
+          <div class="card" data-testid="opencode-go-usage-global-settings">
+            <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                {{ t("admin.settings.opencodeGoUsage.title") }}
+              </h2>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                {{ t("admin.settings.opencodeGoUsage.description") }}
+              </p>
+            </div>
+            <div class="space-y-5 p-6">
+              <div v-if="opencodeGoUsageLoading" class="flex items-center gap-2 text-gray-500">
+                <div class="h-4 w-4 animate-spin rounded-full border-b-2 border-primary-600"></div>
+                {{ t("common.loading") }}
+              </div>
+              <template v-else>
+                <div class="flex items-center justify-between gap-4">
+                  <div>
+                    <label class="font-medium text-gray-900 dark:text-white">
+                      {{ t("admin.settings.opencodeGoUsage.enabled") }}
+                    </label>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">
+                      {{ t("admin.settings.opencodeGoUsage.enabledHint") }}
+                    </p>
+                  </div>
+                  <Toggle v-model="opencodeGoUsageForm.enabled" data-testid="opencode-go-usage-global-enabled" />
+                </div>
+                <div v-if="opencodeGoUsageForm.enabled" class="space-y-4 border-t border-gray-100 pt-4 dark:border-dark-700">
+                  <label class="block text-sm font-medium text-gray-700 dark:text-gray-300" for="opencode-go-usage-debounce">
+                    {{ t("admin.settings.opencodeGoUsage.debounceMinutes") }}
+                    <input id="opencode-go-usage-debounce" v-model.number="opencodeGoUsageForm.debounce_minutes" type="number" min="1" max="60" class="input mt-2 w-32" />
+                  </label>
+                  <label class="block text-sm font-medium text-gray-700 dark:text-gray-300" for="opencode-go-usage-interval">
+                    {{ t("admin.settings.opencodeGoUsage.intervalMinutes") }}
+                    <input id="opencode-go-usage-interval" v-model.number="opencodeGoUsageForm.interval_minutes" type="number" min="5" max="1440" class="input mt-2 w-32" />
+                  </label>
+                </div>
+                <div class="flex justify-end border-t border-gray-100 pt-4 dark:border-dark-700">
+                  <button type="button" class="btn btn-primary btn-sm" :disabled="opencodeGoUsageSaving" @click="saveOpenCodeGoUsageSettings">
+                    {{ opencodeGoUsageSaving ? t("common.saving") : t("common.save") }}
+                  </button>
+                </div>
+              </template>
+            </div>
+          </div>
+
           <!-- Gateway Scheduling Settings -->
           <div class="card">
             <div
@@ -5155,7 +5201,6 @@
                     class="input pr-8"
                     data-testid="openai-oauth-scheduling-rate-multiplier"
                     min="0"
-                    required
                     step="0.01"
                     type="number"
                   />
@@ -5244,7 +5289,6 @@
                     class="input pr-8"
                     data-testid="openai-oauth-scheduling-rate-multiplier"
                     min="0"
-                    required
                     step="0.01"
                     type="number"
                   />
@@ -5877,6 +5921,31 @@
                   </p>
                 </div>
                 <Toggle v-model="form.openai_codex_version_auto_sync_enabled" />
+              </div>
+
+              <div>
+                <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t("admin.settings.gatewayForwarding.claudeCodeClientVersion") }}
+                </label>
+                <input v-model="form.claude_code_client_version" type="text" class="input w-full font-mono text-sm" placeholder="2.1.258" />
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.gatewayForwarding.claudeCodeClientVersionHint") }}
+                </p>
+              </div>
+
+              <div class="flex items-center justify-between">
+                <div>
+                  <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {{ t("admin.settings.gatewayForwarding.claudeCodeVersionAutoSync") }}
+                  </label>
+                  <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    {{ t("admin.settings.gatewayForwarding.claudeCodeVersionAutoSyncHint") }}
+                  </p>
+                  <p v-if="claudeSyncedVersionLabel" class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    {{ claudeSyncedVersionLabel }}
+                  </p>
+                </div>
+                <Toggle v-model="form.claude_code_version_auto_sync_enabled" />
               </div>
 
             </div>
@@ -9148,6 +9217,14 @@ const ollamaCloudUsageForm = reactive({
   debounce_minutes: 1,
 });
 
+const opencodeGoUsageLoading = ref(true);
+const opencodeGoUsageSaving = ref(false);
+const opencodeGoUsageForm = reactive({
+  enabled: false,
+  interval_minutes: 15,
+  debounce_minutes: 1,
+});
+
 // Overload Cooldown (529) 状态
 const overloadCooldownLoading = ref(true);
 const overloadCooldownSaving = ref(false);
@@ -9654,6 +9731,7 @@ type SettingsForm = Omit<
   | "wechat_connect_open_enabled"
   | "wechat_connect_mp_enabled"
   | "wechat_connect_mobile_enabled"
+  | "openai_oauth_scheduling_rate_multiplier"
 > & {
   openai_codex_ticket_harvest_scope: { mode: "all" | "selected"; group_ids: number[]; account_policy: "schedulable_only" | "prioritize_schedulable" };
   /** Form always binds a concrete boolean (SystemSettings marks this optional). */
@@ -9680,7 +9758,7 @@ type SettingsForm = Omit<
   google_oauth_client_secret: string;
   force_email_on_third_party_signup: boolean;
   openai_low_upstream_rate_priority_enabled: boolean;
-  openai_oauth_scheduling_rate_multiplier: number;
+  openai_oauth_scheduling_rate_multiplier: number | "" | null;
   openai_advanced_scheduler_enabled: boolean;
   openai_advanced_scheduler_sticky_weighted_enabled: boolean;
   openai_advanced_scheduler_subscription_priority_enabled: boolean;
@@ -9955,6 +10033,9 @@ const form = reactive<SettingsForm>({
   // 只读展示：自动同步任务写入的官方最新稳定版，不参与提交（提交载荷按字段显式构造）
   openai_codex_client_version_synced: "",
   openai_codex_version_auto_sync_enabled: true,
+  claude_code_client_version: "",
+  claude_code_client_version_synced: "",
+  claude_code_version_auto_sync_enabled: true,
   openai_codex_ticket_enabled: false,
   openai_codex_ticket_fail_closed: false,
   openai_codex_ticket_harvest_scope: { mode: 'all', group_ids: [], account_policy: 'schedulable_only' },
@@ -10948,6 +11029,12 @@ const codexSyncedVersionLabel = computed(() => {
   });
 });
 
+const claudeSyncedVersionLabel = computed(() => {
+  const synced = form.claude_code_client_version_synced?.trim();
+  if (!synced) return "";
+  return t("admin.settings.gatewayForwarding.claudeCodeVersionSyncedValue", { version: synced });
+});
+
 async function loadSettings() {
   loading.value = true;
   loadFailed.value = false;
@@ -10963,6 +11050,9 @@ async function loadSettings() {
     }
     form.openai_codex_ticket_harvest_scope.account_policy =
       form.openai_codex_ticket_harvest_scope.account_policy || 'schedulable_only';
+    if (settings.openai_oauth_scheduling_rate_multiplier === null) {
+      form.openai_oauth_scheduling_rate_multiplier = null;
+    }
     syncCaptchaProviderSelection();
     if (!form.claude_oauth_system_prompt_blocks?.trim()) {
       form.claude_oauth_system_prompt_blocks =
@@ -11376,6 +11466,16 @@ async function saveSettings() {
     form.claude_oauth_system_prompt_blocks =
       claudeOAuthSystemPromptBlocksJSON;
 
+    const oauthSchedulingRate = form.openai_oauth_scheduling_rate_multiplier;
+    if (
+      oauthSchedulingRate !== "" &&
+      oauthSchedulingRate !== null &&
+      (!Number.isFinite(oauthSchedulingRate) || oauthSchedulingRate < 0)
+    ) {
+      appStore.showError(t("admin.settings.openaiExperimentalScheduler.oauthRateInvalid"));
+      return;
+    }
+
     const payload: UpdateSettingsRequest = {
       registration_enabled: form.registration_enabled,
       email_verify_enabled: form.email_verify_enabled,
@@ -11583,6 +11683,9 @@ async function saveSettings() {
         form.openai_codex_client_version?.trim() || "",
       openai_codex_version_auto_sync_enabled:
         form.openai_codex_version_auto_sync_enabled,
+      claude_code_client_version: form.claude_code_client_version?.trim() || "",
+      claude_code_version_auto_sync_enabled:
+        form.claude_code_version_auto_sync_enabled,
       openai_codex_ticket_enabled: form.openai_codex_ticket_enabled,
       openai_codex_ticket_fail_closed: form.openai_codex_ticket_fail_closed,
       openai_codex_ticket_harvest_scope: {
@@ -11644,7 +11747,7 @@ async function saveSettings() {
       openai_low_upstream_rate_priority_enabled:
         form.openai_low_upstream_rate_priority_enabled,
       openai_oauth_scheduling_rate_multiplier:
-        form.openai_oauth_scheduling_rate_multiplier,
+        oauthSchedulingRate === "" ? null : oauthSchedulingRate,
       openai_advanced_scheduler_enabled: form.openai_advanced_scheduler_enabled,
       openai_advanced_scheduler_sticky_weighted_enabled:
         form.openai_advanced_scheduler_sticky_weighted_enabled,
@@ -12037,6 +12140,30 @@ async function saveOllamaCloudUsageSettings() {
     );
   } finally {
     ollamaCloudUsageSaving.value = false;
+  }
+}
+
+async function loadOpenCodeGoUsageSettings() {
+  opencodeGoUsageLoading.value = true;
+  try {
+    Object.assign(opencodeGoUsageForm, await adminAPI.accounts.getOpenCodeGoUsageSettings());
+  } catch (_error: unknown) {
+    // Keep fail-safe disabled defaults when the optional setting is unavailable.
+  } finally {
+    opencodeGoUsageLoading.value = false;
+  }
+}
+
+async function saveOpenCodeGoUsageSettings() {
+  opencodeGoUsageSaving.value = true;
+  try {
+    const updated = await adminAPI.accounts.updateOpenCodeGoUsageSettings({ ...opencodeGoUsageForm });
+    Object.assign(opencodeGoUsageForm, updated);
+    appStore.showSuccess(t("admin.settings.opencodeGoUsage.saved"));
+  } catch (error: unknown) {
+    appStore.showError(extractApiErrorMessage(error, t("admin.settings.opencodeGoUsage.saveFailed")));
+  } finally {
+    opencodeGoUsageSaving.value = false;
   }
 }
 
@@ -12790,6 +12917,7 @@ onMounted(() => {
   loadAdminApiKey();
   loadUpstreamBillingProbeSettings();
   loadOllamaCloudUsageSettings();
+  loadOpenCodeGoUsageSettings();
   loadOverloadCooldownSettings();
   loadRateLimit429CooldownSettings();
   loadPanelRateLimitSettings();
