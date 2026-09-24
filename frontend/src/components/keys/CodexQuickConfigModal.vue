@@ -91,7 +91,7 @@ import BaseDialog from '@/components/common/BaseDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
 import {
   buildMacLinuxCodexQuickConfigScript,
-  buildWindowsCodexQuickConfigScript,
+  buildWindowsCmdCodexQuickConfigScript,
   type CodexQuickConfigPlatform
 } from '@/utils/codexQuickConfig'
 
@@ -117,15 +117,15 @@ const input = computed(() => ({
 }))
 
 const script = computed(() => activePlatform.value === 'windows'
-  ? buildWindowsCodexQuickConfigScript(input.value)
+  ? buildWindowsCmdCodexQuickConfigScript(input.value)
   : buildMacLinuxCodexQuickConfigScript(input.value))
 
 const fileName = computed(() => activePlatform.value === 'windows'
-  ? 'sub2api-codex-config.ps1'
+  ? 'sub2api-codex-config.cmd'
   : 'sub2api-codex-config.sh')
 
 const runCommand = computed(() => activePlatform.value === 'windows'
-  ? `powershell -ExecutionPolicy Bypass -File .\\${fileName.value}`
+  ? t('keys.quickConfigureModal.windowsRun')
   : `chmod +x ${fileName.value} && ./${fileName.value}`)
 
 const tabClass = (selected: boolean) => [

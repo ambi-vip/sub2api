@@ -30,3 +30,20 @@ func TestModelTraceTestModelKeepsPlatformDefaults(t *testing.T) {
 		})
 	}
 }
+
+func TestEligibleModelTraceAccountEntriesOnlyIncludeActiveSchedulableAccounts(t *testing.T) {
+	accounts := []Account{
+		{ID: 1, Status: StatusActive, Schedulable: true},
+		{ID: 2, Status: StatusActive, Schedulable: false},
+		{ID: 3, Status: StatusError, Schedulable: true},
+		{ID: 4, Status: StatusDisabled, Schedulable: true},
+	}
+
+	entries := eligibleModelTraceAccountEntries(accounts)
+	if len(entries) != 1 {
+		t.Fatalf("expected one eligible account, got %d", len(entries))
+	}
+	if entries[0].account == nil || entries[0].account.ID != 1 {
+		t.Fatalf("expected account 1 to be eligible, got %#v", entries[0].account)
+	}
+}

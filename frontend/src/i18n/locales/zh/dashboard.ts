@@ -166,6 +166,7 @@ export default {
       copied: '已复制',
       download: '下载脚本',
       runTitle: '运行方式',
+      windowsRun: '下载后双击 .cmd 文件即可自动配置；成功后窗口会自动关闭。',
     },
     useKeyModal: {
       title: '使用 API 密钥',

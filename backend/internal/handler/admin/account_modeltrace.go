@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -19,29 +20,8 @@ func (h *AccountHandler) DetectModelTrace(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
-	if request.Scope != "all" && request.Scope != "selected" && request.Scope != "group" {
-		response.BadRequest(c, "scope must be all, selected, or group")
-		return
-	}
-	if request.Scope == "selected" {
-		if len(request.AccountIDs) == 0 {
-			response.BadRequest(c, "account_ids must contain at least one ID")
-			return
-		}
-		for _, accountID := range request.AccountIDs {
-			if accountID <= 0 {
-				response.BadRequest(c, "account_ids must contain positive IDs")
-				return
-			}
-		}
-	}
-	if request.Scope == "group" && request.GroupID <= 0 {
-		response.BadRequest(c, "group_id must be a positive ID")
-		return
-	}
-	request.ModelID = strings.TrimSpace(request.ModelID)
-	if len(request.ModelID) > 200 {
-		response.BadRequest(c, "model_id must be at most 200 characters")
+	if err := validateModelTraceRequest(&request); err != nil {
+		response.BadRequest(c, err.Error())
 		return
 	}
 	result, err := h.accountTestService.DetectModelTrace(c.Request.Context(), request)
@@ -50,4 +30,63 @@ func (h *AccountHandler) DetectModelTrace(c *gin.Context) {
 		return
 	}
 	response.Success(c, result)
+}
+
+func (h *AccountHandler) StartModelTraceDetection(c *gin.Context) {
+	if h.accountTestService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Account test service unavailable")
+		return
+	}
+	var request service.ModelTraceDetectionRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if err := validateModelTraceRequest(&request); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	result, err := h.accountTestService.StartModelTraceDetection(c.Request.Context(), request)
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.Success(c, result)
+}
+
+func (h *AccountHandler) GetModelTraceDetection(c *gin.Context) {
+	if h.accountTestService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Account test service unavailable")
+		return
+	}
+	result, err := h.accountTestService.GetModelTraceDetection(strings.TrimSpace(c.Param("job_id")))
+	if err != nil {
+		response.Error(c, http.StatusNotFound, err.Error())
+		return
+	}
+	response.Success(c, result)
+}
+
+func validateModelTraceRequest(request *service.ModelTraceDetectionRequest) error {
+	if request.Scope != "all" && request.Scope != "selected" && request.Scope != "group" {
+		return fmt.Errorf("scope must be all, selected, or group")
+	}
+	if request.Scope == "selected" {
+		if len(request.AccountIDs) == 0 {
+			return fmt.Errorf("account_ids must contain at least one ID")
+		}
+		for _, accountID := range request.AccountIDs {
+			if accountID <= 0 {
+				return fmt.Errorf("account_ids must contain positive IDs")
+			}
+		}
+	}
+	if request.Scope == "group" && request.GroupID <= 0 {
+		return fmt.Errorf("group_id must be a positive ID")
+	}
+	request.ModelID = strings.TrimSpace(request.ModelID)
+	if len(request.ModelID) > 200 {
+		return fmt.Errorf("model_id must be at most 200 characters")
+	}
+	return nil
 }

@@ -109,7 +109,26 @@
       </section>
 
       <section v-if="response" class="card space-y-4 p-5 md:p-6" aria-live="polite">
-        <div class="grid gap-3 sm:grid-cols-3">
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700">
+            <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.modelTrace.progress') }}</div>
+            <div class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
+              {{ response.completed }} / {{ response.total }}
+            </div>
+            <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
+              <div class="h-full rounded-full bg-primary-600 transition-all" :style="{ width: `${response.progress_percent}%` }"></div>
+            </div>
+          </div>
+          <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700">
+            <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.modelTrace.queueStatus') }}</div>
+            <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
+              {{ t('admin.accounts.modelTrace.queuedCount', { count: response.queued }) }} ·
+              {{ t('admin.accounts.modelTrace.runningCount', { count: response.running }) }}
+            </div>
+            <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.modelTrace.concurrency', { count: response.concurrency }) }}
+            </div>
+          </div>
           <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700">
             <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.modelTrace.detected') }}</div>
             <div class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ response.detected }}</div>
@@ -117,6 +136,11 @@
           <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700">
             <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.modelTrace.failed') }}</div>
             <div class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ response.failed }}</div>
+          </div>
+          <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700">
+            <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.modelTrace.speed') }}</div>
+            <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ detectionSpeed }}</div>
+            <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ formatDuration(response.duration_ms) }}</div>
           </div>
           <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700">
             <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.modelTrace.method') }}</div>
@@ -178,16 +202,32 @@
             <thead class="bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-gray-500 dark:bg-dark-700 dark:text-gray-400">
               <tr>
                 <th class="px-3 py-2">{{ t('admin.accounts.modelTrace.account') }}</th>
+                <th class="px-3 py-2">{{ t('admin.accounts.modelTrace.status') }}</th>
                 <th class="px-3 py-2">{{ t('admin.accounts.modelTrace.model') }}</th>
                 <th class="px-3 py-2">{{ t('admin.accounts.modelTrace.prediction') }}</th>
                 <th class="px-3 py-2">{{ t('admin.accounts.modelTrace.samples') }}</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
-              <tr v-for="item in filteredResults" :key="`${item.account_id}-${item.account_name}`" class="align-top">
+              <tr
+                v-for="item in filteredResults"
+                :key="`${item.account_id}-${item.account_name}`"
+                class="cursor-pointer align-top transition-colors hover:bg-gray-50 dark:hover:bg-dark-700"
+                :class="selectedResult?.account_id === item.account_id ? 'bg-primary-50 dark:bg-primary-900/20' : ''"
+                @click="selectedResult = item"
+              >
                 <td class="px-3 py-2">
                   <div class="font-medium text-gray-900 dark:text-white">{{ item.account_name || `#${item.account_id}` }}</div>
                   <div class="text-xs text-gray-500 dark:text-gray-400">{{ item.platform }} · #{{ item.account_id }}</div>
+                </td>
+                <td class="px-3 py-2">
+                  <span
+                    class="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium"
+                    :class="statusClass(item.status)"
+                  >
+                    <span v-if="item.status === 'running'" class="h-2.5 w-2.5 animate-spin rounded-full border-2 border-current border-t-transparent"></span>
+                    {{ statusLabel(item.status) }}
+                  </span>
                 </td>
                 <td class="px-3 py-2 text-gray-600 dark:text-gray-300">{{ item.model_id || '—' }}</td>
                 <td class="px-3 py-2">
@@ -200,22 +240,59 @@
                       {{ item.candidates.map((candidate) => `${candidate.display_name} ${percentage(candidate.probability)}%`).join(' · ') }}
                     </div>
                   </template>
-                  <span v-else class="text-red-600 dark:text-red-400">{{ item.error || t('admin.accounts.modelTrace.failed') }}</span>
+                  <span v-else-if="item.status === 'failed'" class="text-red-600 dark:text-red-400">{{ item.error || t('admin.accounts.modelTrace.failed') }}</span>
+                  <span v-else class="text-gray-500 dark:text-gray-400">{{ statusLabel(item.status) }}</span>
                 </td>
                 <td class="px-3 py-2 text-gray-600 dark:text-gray-300">
-                  {{ item.used_outputs }}/3 · {{ t('admin.accounts.modelTrace.attempts', { count: item.attempts }) }}
+                  <div class="flex items-center justify-between gap-2 text-xs">
+                    <span>{{ item.used_outputs }}/3 · {{ t('admin.accounts.modelTrace.attempts', { count: item.attempts }) }}</span>
+                    <span>{{ accountProgress(item) }}%</span>
+                  </div>
+                  <div class="mt-1 h-1.5 min-w-32 overflow-hidden rounded-full bg-gray-200 dark:bg-dark-600">
+                    <div class="h-full rounded-full bg-primary-500 transition-all" :style="{ width: `${accountProgress(item)}%` }"></div>
+                  </div>
                   <div v-if="item.errors?.length" class="mt-1 max-w-xs truncate text-xs text-amber-700 dark:text-amber-300" :title="item.errors.join('\n')">
                     {{ item.errors[0] }}
                   </div>
                 </td>
               </tr>
               <tr v-if="filteredResults.length === 0">
-                <td colspan="4" class="px-3 py-6 text-center text-gray-500 dark:text-gray-400">
+                <td colspan="5" class="px-3 py-6 text-center text-gray-500 dark:text-gray-400">
                   {{ resultRows.length === 0 ? t('admin.accounts.modelTrace.noAccounts') : t('admin.accounts.modelTrace.noMatchingResults') }}
                 </td>
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <div v-if="selectedResult" class="rounded-lg border border-primary-200 bg-primary-50/50 p-4 dark:border-primary-800 dark:bg-primary-900/10">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+                {{ t('admin.accounts.modelTrace.details') }} · {{ selectedResult.account_name || `#${selectedResult.account_id}` }}
+              </h3>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                #{{ selectedResult.account_id }} · {{ selectedResult.platform }} · {{ statusLabel(selectedResult.status) }}
+              </p>
+            </div>
+            <button type="button" class="text-xs text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white" @click="selectedResult = null">
+              {{ t('common.close') }}
+            </button>
+          </div>
+          <div class="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <div><span class="text-gray-500 dark:text-gray-400">{{ t('admin.accounts.modelTrace.attemptsLabel') }}</span><div class="font-medium text-gray-900 dark:text-white">{{ selectedResult.attempts }}</div></div>
+            <div><span class="text-gray-500 dark:text-gray-400">{{ t('admin.accounts.modelTrace.outputsLabel') }}</span><div class="font-medium text-gray-900 dark:text-white">{{ selectedResult.used_outputs }} / 3</div></div>
+            <div><span class="text-gray-500 dark:text-gray-400">{{ t('admin.accounts.modelTrace.latencyLabel') }}</span><div class="font-medium text-gray-900 dark:text-white">{{ formatDuration(selectedResult.latency_ms) }}</div></div>
+            <div><span class="text-gray-500 dark:text-gray-400">{{ t('admin.accounts.modelTrace.model') }}</span><div class="break-all font-medium text-gray-900 dark:text-white">{{ selectedResult.model_id || '—' }}</div></div>
+          </div>
+          <div v-if="selectedResult.status === 'success'" class="mt-3 text-sm text-gray-700 dark:text-gray-200">
+            {{ selectedResult.prediction_name }} · {{ percentage(selectedResult.probability || 0) }}%
+            <span class="text-gray-500 dark:text-gray-400"> · {{ t('admin.accounts.modelTrace.family') }}: {{ selectedResult.family_name }} · {{ percentage(selectedResult.family_probability || 0) }}%</span>
+          </div>
+          <div v-if="selectedResult.error" class="mt-3 text-sm text-red-700 dark:text-red-300">{{ selectedResult.error }}</div>
+          <div v-if="selectedResult.errors.length" class="mt-3 space-y-1 text-xs text-amber-700 dark:text-amber-300">
+            <div v-for="(error, index) in selectedResult.errors" :key="`${selectedResult.account_id}-error-${index}`">{{ error }}</div>
+          </div>
         </div>
       </section>
     </div>
@@ -223,10 +300,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
-import type { ModelTraceDetectionResponse } from '@/api/admin/accounts'
+import type { ModelTraceAccountResult, ModelTraceDetectionResponse } from '@/api/admin/accounts'
 import type { AdminGroup } from '@/types'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import AppLayout from '@/components/layout/AppLayout.vue'
@@ -243,6 +320,9 @@ const settingsLoading = ref(false)
 const running = ref(false)
 const requestError = ref('')
 const response = ref<ModelTraceDetectionResponse | null>(null)
+const selectedResult = ref<ModelTraceAccountResult | null>(null)
+const pollTimer = ref<ReturnType<typeof setInterval> | null>(null)
+const pollInFlight = ref(false)
 const resultSearch = ref('')
 const resultFilter = ref<'all' | 'success' | 'failed'>('all')
 const modelChoice = ref('')
@@ -289,6 +369,11 @@ const filteredResults = computed(() => {
       .some((value) => String(value).toLowerCase().includes(query))
   })
 })
+const detectionSpeed = computed(() => {
+  const seconds = (response.value?.duration_ms || 0) / 1000
+  if (!seconds || !response.value?.completed) return '—'
+  return `${(response.value.completed / seconds).toFixed(2)} /s`
+})
 
 onMounted(async () => {
   groupsLoading.value = true
@@ -310,7 +395,9 @@ onMounted(async () => {
 })
 
 watch([scope, groupID, accountIDsText, modelChoice, customModelID], () => {
+  stopPolling()
   response.value = null
+  selectedResult.value = null
   requestError.value = ''
   resultSearch.value = ''
   resultFilter.value = 'all'
@@ -321,7 +408,9 @@ function percentage(value: number) {
 }
 
 function clearResults() {
+  stopPolling()
   response.value = null
+  selectedResult.value = null
   resultSearch.value = ''
   resultFilter.value = 'all'
   requestError.value = ''
@@ -332,17 +421,78 @@ async function runDetection() {
   running.value = true
   requestError.value = ''
   response.value = null
+  selectedResult.value = null
+  stopPolling()
   try {
-    response.value = await adminAPI.accounts.detectModelTrace({
+    response.value = await adminAPI.accounts.startModelTraceDetection({
       scope: scope.value,
       ...(selectedModelID.value ? { model_id: selectedModelID.value } : {}),
       ...(scope.value === 'selected' ? { account_ids: selectedAccountIds.value } : {}),
       ...(scope.value === 'group' ? { group_id: groupID.value } : {}),
     })
+    if (response.value.status === 'succeeded' || !response.value.job_id) {
+      running.value = false
+    } else {
+      startPolling(response.value.job_id)
+    }
+  } catch (error) {
+    requestError.value = extractApiErrorMessage(error, t('admin.accounts.modelTrace.failed'))
+    running.value = false
+  }
+}
+
+function startPolling(jobID: string) {
+  stopPolling()
+  pollTimer.value = setInterval(() => void pollJob(jobID), 1000)
+  void pollJob(jobID)
+}
+
+async function pollJob(jobID: string) {
+  if (pollInFlight.value) return
+  pollInFlight.value = true
+  try {
+    response.value = await adminAPI.accounts.getModelTraceDetection(jobID)
+    if (selectedResult.value) {
+      selectedResult.value = response.value.results.find((item) => item.account_id === selectedResult.value?.account_id) ?? null
+    }
+    if (response.value.status === 'succeeded') {
+      running.value = false
+      stopPolling()
+    }
   } catch (error) {
     requestError.value = extractApiErrorMessage(error, t('admin.accounts.modelTrace.failed'))
   } finally {
-    running.value = false
+    pollInFlight.value = false
   }
+}
+
+function stopPolling() {
+  if (pollTimer.value) {
+    clearInterval(pollTimer.value)
+    pollTimer.value = null
+  }
+}
+
+onUnmounted(stopPolling)
+
+function statusLabel(status: ModelTraceAccountResult['status']) {
+  return t(`admin.accounts.modelTrace.statuses.${status}`)
+}
+
+function statusClass(status: ModelTraceAccountResult['status']) {
+  if (status === 'success') return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+  if (status === 'failed') return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+  if (status === 'running') return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+  return 'bg-gray-100 text-gray-600 dark:bg-dark-600 dark:text-gray-300'
+}
+
+function formatDuration(milliseconds: number) {
+  if (!milliseconds || milliseconds < 1000) return `${Math.max(0, milliseconds)} ms`
+  return `${(milliseconds / 1000).toFixed(1)} s`
+}
+
+function accountProgress(item: ModelTraceAccountResult) {
+  if (item.status === 'success' || item.status === 'failed') return 100
+  return Math.min(99, Math.round((item.used_outputs / 3) * 100))
 }
 </script>

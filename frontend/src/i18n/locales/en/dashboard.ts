@@ -166,6 +166,7 @@ export default {
       copied: 'Copied',
       download: 'Download Script',
       runTitle: 'Run with',
+      windowsRun: 'Download the .cmd file and double-click it to configure Codex automatically. The window closes after success.',
     },
     useKeyModal: {
       title: 'Use API Key',

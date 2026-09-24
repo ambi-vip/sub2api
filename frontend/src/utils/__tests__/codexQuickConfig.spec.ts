@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import {
   buildCodexQuickConfigToml,
   buildMacLinuxCodexQuickConfigScript,
+  buildWindowsCmdCodexQuickConfigScript,
   buildWindowsCodexQuickConfigScript,
   normalizeCodexBaseUrl
 } from '@/utils/codexQuickConfig'
@@ -37,6 +38,7 @@ describe('codexQuickConfig', () => {
       platform: 'openai' as const
     }
     const unixScript = buildMacLinuxCodexQuickConfigScript(input)
+    const cmdScript = buildWindowsCmdCodexQuickConfigScript(input)
     const windowsScript = buildWindowsCodexQuickConfigScript(input)
 
     expect(unixScript).toContain('#!/usr/bin/env bash')
@@ -57,6 +59,20 @@ describe('codexQuickConfig', () => {
       .split('')
       .map((character) => character.charCodeAt(0))
     expect(new TextDecoder().decode(new Uint8Array(decodedConfig))).toContain('experimental_bearer_token')
+
+    expect(cmdScript).toContain('@echo off')
+    expect(cmdScript).toContain('set "CONFIG_DIR=%USERPROFILE%\\.codex"')
+    expect(cmdScript).toContain('powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass')
+    expect(cmdScript).toContain('move /Y "%TEMP_FILE%" "%CONFIG_FILE%"')
+    expect(cmdScript).toContain('pause')
+    const cmdPayload = cmdScript.match(/set "SUB2API_CODEX_PAYLOAD=([^\"]+)"/)?.[1]
+    expect(cmdPayload).toBeDefined()
+    const decodedCmdConfig = atob(cmdPayload!)
+      .split('')
+      .map((character) => character.charCodeAt(0))
+    expect(new TextDecoder().decode(new Uint8Array(decodedCmdConfig))).toContain(
+      'experimental_bearer_token'
+    )
   })
 
   it('runs the macOS/Linux script and overwrites the existing Codex config', () => {

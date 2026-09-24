@@ -352,11 +352,50 @@ export interface ModelTraceCandidate {
   score: number
 }
 
+export interface ModelTraceDetectionRequest {
+  scope: 'all' | 'selected' | 'group'
+  account_ids?: number[]
+  group_id?: number
+  model_id?: string
+}
+
+export interface ModelTraceAccountResult {
+  account_id: number
+  account_name: string
+  platform: string
+  account_type: string
+  model_id?: string
+  status: 'queued' | 'running' | 'success' | 'failed'
+  error?: string
+  errors: string[]
+  attempts: number
+  used_outputs: number
+  latency_ms: number
+  prediction?: string
+  prediction_name?: string
+  probability?: number
+  family_prediction?: string
+  family_name?: string
+  family_probability?: number
+  candidates: ModelTraceCandidate[]
+}
+
 export interface ModelTraceDetectionResponse {
   scope: 'all' | 'selected' | 'group'
   total: number
   detected: number
   failed: number
+  queued: number
+  running: number
+  completed: number
+  progress_percent: number
+  concurrency: number
+  job_id?: string
+  status?: 'queued' | 'running' | 'succeeded'
+  model_id?: string
+  started_at?: string
+  finished_at?: string
+  duration_ms: number
   method: string
   predictions: Array<{
     prediction: string
@@ -364,53 +403,56 @@ export interface ModelTraceDetectionResponse {
     count: number
     average_probability: number
   }>
-  results: Array<{
-    account_id: number
-    account_name: string
-    platform: string
-    account_type: string
-    model_id?: string
-    status: 'success' | 'failed'
-    error?: string
-    errors?: string[]
-    attempts: number
-    used_outputs: number
-    latency_ms: number
-    prediction?: string
-    prediction_name?: string
-    probability?: number
-    family_prediction?: string
-    family_name?: string
-    family_probability?: number
-    candidates?: ModelTraceCandidate[]
-  }>
+  results: ModelTraceAccountResult[]
 }
 
-export async function detectModelTrace(payload: {
-  scope: 'all' | 'selected' | 'group'
-  account_ids?: number[]
-  group_id?: number
-  model_id?: string
-}): Promise<ModelTraceDetectionResponse> {
-  const { data } = await apiClient.post<ModelTraceDetectionResponse>('/admin/accounts/modeltrace/detect', payload, { timeout: 0 })
-  // Older servers and partially failed upstream responses may serialize array
-  // fields as null. Keep the UI contract stable at the API boundary.
+function normalizeModelTraceResponse(data: unknown, payload: ModelTraceDetectionRequest): ModelTraceDetectionResponse {
   const response = (data ?? {}) as Partial<ModelTraceDetectionResponse>
+  const rawResults = Array.isArray(response.results) ? response.results : []
   return {
     scope: response.scope ?? payload.scope,
-    total: Number.isFinite(response.total) ? response.total! : 0,
+    total: Number.isFinite(response.total) ? response.total! : rawResults.length,
     detected: Number.isFinite(response.detected) ? response.detected! : 0,
     failed: Number.isFinite(response.failed) ? response.failed! : 0,
+    queued: Number.isFinite(response.queued) ? response.queued! : rawResults.filter((item) => item?.status === 'queued').length,
+    running: Number.isFinite(response.running) ? response.running! : rawResults.filter((item) => item?.status === 'running').length,
+    completed: Number.isFinite(response.completed) ? response.completed! : rawResults.filter((item) => item?.status === 'success' || item?.status === 'failed').length,
+    progress_percent: Number.isFinite(response.progress_percent)
+      ? response.progress_percent!
+      : rawResults.length > 0
+        ? Math.round((rawResults.filter((item) => item?.status === 'success' || item?.status === 'failed').length / rawResults.length) * 100)
+        : 0,
+    concurrency: Number.isFinite(response.concurrency) ? response.concurrency! : 0,
+    job_id: response.job_id,
+    status: response.status,
+    model_id: response.model_id,
+    started_at: response.started_at,
+    finished_at: response.finished_at,
+    duration_ms: Number.isFinite(response.duration_ms) ? response.duration_ms! : 0,
     method: response.method ?? '',
     predictions: Array.isArray(response.predictions) ? response.predictions : [],
-    results: Array.isArray(response.results)
-      ? response.results.map((item) => ({
-          ...item,
-          candidates: Array.isArray(item?.candidates) ? item.candidates : [],
-          errors: Array.isArray(item?.errors) ? item.errors : [],
-        }))
-      : [],
+    results: rawResults.map((item) => ({
+      ...item,
+      status: item?.status ?? 'failed',
+      errors: Array.isArray(item?.errors) ? item.errors : [],
+      candidates: Array.isArray(item?.candidates) ? item.candidates : [],
+    })) as ModelTraceAccountResult[],
   }
+}
+
+export async function detectModelTrace(payload: ModelTraceDetectionRequest): Promise<ModelTraceDetectionResponse> {
+  const { data } = await apiClient.post<ModelTraceDetectionResponse>('/admin/accounts/modeltrace/detect', payload, { timeout: 0 })
+  return normalizeModelTraceResponse(data, payload)
+}
+
+export async function startModelTraceDetection(payload: ModelTraceDetectionRequest): Promise<ModelTraceDetectionResponse> {
+  const { data } = await apiClient.post<ModelTraceDetectionResponse>('/admin/accounts/modeltrace/jobs', payload)
+  return normalizeModelTraceResponse(data, payload)
+}
+
+export async function getModelTraceDetection(jobID: string): Promise<ModelTraceDetectionResponse> {
+  const { data } = await apiClient.get<ModelTraceDetectionResponse>(`/admin/accounts/modeltrace/jobs/${encodeURIComponent(jobID)}`)
+  return normalizeModelTraceResponse(data, { scope: 'all' })
 }
 
 /**
@@ -1284,7 +1326,9 @@ export const accountsAPI = {
   getOpenCodeGoUsage,
   setOpenCodeGoUsageAutoRefresh,
   refreshOpenCodeGoUsage,
-  detectModelTrace
+  detectModelTrace,
+  startModelTraceDetection,
+  getModelTraceDetection
 }
 
 export default accountsAPI

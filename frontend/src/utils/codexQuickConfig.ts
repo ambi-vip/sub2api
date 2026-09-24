@@ -142,3 +142,38 @@ try {
 Write-Host "Codex configuration written to $configFile"
 `
 }
+
+/**
+ * A double-clickable Windows CMD script. PowerShell is only used as the
+ * built-in UTF-8/Base64 decoder; no execution policy change is persisted.
+ */
+export function buildWindowsCmdCodexQuickConfigScript(input: CodexQuickConfigInput): string {
+  const payload = encodeUtf8Base64(buildCodexQuickConfigToml(input))
+  return `@echo off
+setlocal EnableExtensions DisableDelayedExpansion
+
+set "CONFIG_DIR=%USERPROFILE%\\.codex"
+set "CONFIG_FILE=%CONFIG_DIR%\\config.toml"
+set "TEMP_FILE=%CONFIG_FILE%.tmp.%RANDOM%%RANDOM%"
+set "SUB2API_CODEX_PAYLOAD=${payload}"
+set "SUB2API_CODEX_TEMP=%TEMP_FILE%"
+
+if not exist "%CONFIG_DIR%\\" mkdir "%CONFIG_DIR%" >nul 2>&1
+if errorlevel 1 goto :error
+
+powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$bytes = [Convert]::FromBase64String($env:SUB2API_CODEX_PAYLOAD); [IO.File]::WriteAllBytes($env:SUB2API_CODEX_TEMP, $bytes)"
+if errorlevel 1 goto :error
+
+move /Y "%TEMP_FILE%" "%CONFIG_FILE%" >nul
+if errorlevel 1 goto :error
+
+echo Codex configuration written to "%CONFIG_FILE%"
+exit /b 0
+
+:error
+del /q "%TEMP_FILE%" >nul 2>&1
+echo Failed to write Codex configuration. >&2
+pause
+exit /b 1
+`
+}

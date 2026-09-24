@@ -56,10 +56,21 @@ type ModelTraceAccountResult struct {
 }
 
 type ModelTraceDetectionResponse struct {
+	JobID       string                        `json:"job_id,omitempty"`
+	Status      string                        `json:"status,omitempty"`
 	Scope       string                        `json:"scope"`
 	Total       int                           `json:"total"`
 	Detected    int                           `json:"detected"`
 	Failed      int                           `json:"failed"`
+	Queued      int                           `json:"queued"`
+	Running     int                           `json:"running"`
+	Completed   int                           `json:"completed"`
+	Progress    int                           `json:"progress_percent"`
+	Concurrency int                           `json:"concurrency"`
+	ModelID     string                        `json:"model_id,omitempty"`
+	StartedAt   time.Time                     `json:"started_at,omitempty"`
+	FinishedAt  *time.Time                    `json:"finished_at,omitempty"`
+	DurationMS  int64                         `json:"duration_ms"`
 	Method      string                        `json:"method"`
 	Predictions []ModelTracePredictionSummary `json:"predictions"`
 	Results     []ModelTraceAccountResult     `json:"results"`
@@ -172,28 +183,20 @@ func (s *AccountTestService) DetectModelTrace(ctx context.Context, request Model
 func (s *AccountTestService) resolveModelTraceAccounts(ctx context.Context, request ModelTraceDetectionRequest) ([]modelTraceAccountEntry, error) {
 	switch request.Scope {
 	case "all":
-		accounts, err := s.accountRepo.ListAllWithFilters(ctx, "", "", "", "", 0, "")
+		accounts, err := s.accountRepo.ListAllWithFilters(ctx, "", "", StatusActive, "", 0, "")
 		if err != nil {
 			return nil, fmt.Errorf("list accounts for ModelTrace: %w", err)
 		}
-		entries := make([]modelTraceAccountEntry, 0, len(accounts))
-		for i := range accounts {
-			entries = append(entries, modelTraceAccountEntry{account: &accounts[i]})
-		}
-		return entries, nil
+		return eligibleModelTraceAccountEntries(accounts), nil
 	case "group":
 		if request.GroupID <= 0 {
 			return nil, fmt.Errorf("group_id must be a positive ID")
 		}
-		accounts, err := s.accountRepo.ListAllWithFilters(ctx, "", "", "", "", request.GroupID, "")
+		accounts, err := s.accountRepo.ListAllWithFilters(ctx, "", "", StatusActive, "", request.GroupID, "")
 		if err != nil {
 			return nil, fmt.Errorf("list group accounts for ModelTrace: %w", err)
 		}
-		entries := make([]modelTraceAccountEntry, 0, len(accounts))
-		for i := range accounts {
-			entries = append(entries, modelTraceAccountEntry{account: &accounts[i]})
-		}
-		return entries, nil
+		return eligibleModelTraceAccountEntries(accounts), nil
 	case "selected":
 		ids := make([]int64, 0, len(request.AccountIDs))
 		seen := make(map[int64]struct{}, len(request.AccountIDs))
@@ -220,9 +223,12 @@ func (s *AccountTestService) resolveModelTraceAccounts(ctx context.Context, requ
 				accountByID[account.ID] = account
 			}
 		}
-		entries := make([]modelTraceAccountEntry, 0, len(ids))
+		entries := make([]modelTraceAccountEntry, 0, len(accounts))
 		for _, id := range ids {
-			entries = append(entries, modelTraceAccountEntry{account: accountByID[id], missingID: id})
+			account := accountByID[id]
+			if isEligibleModelTraceAccount(account) {
+				entries = append(entries, modelTraceAccountEntry{account: account})
+			}
 		}
 		return entries, nil
 	default:
@@ -230,7 +236,30 @@ func (s *AccountTestService) resolveModelTraceAccounts(ctx context.Context, requ
 	}
 }
 
+// ModelTrace only probes accounts that are in a normal, enabled state. The
+// status and schedulable flags are persistent admin controls; transient quota
+// or rate-limit state is intentionally left to the normal account test path.
+func isEligibleModelTraceAccount(account *Account) bool {
+	return account != nil && account.Status == StatusActive && account.Schedulable
+}
+
+func eligibleModelTraceAccountEntries(accounts []Account) []modelTraceAccountEntry {
+	entries := make([]modelTraceAccountEntry, 0, len(accounts))
+	for index := range accounts {
+		if isEligibleModelTraceAccount(&accounts[index]) {
+			entries = append(entries, modelTraceAccountEntry{account: &accounts[index]})
+		}
+	}
+	return entries
+}
+
+type modelTraceAccountProgress func(ModelTraceAccountResult)
+
 func (s *AccountTestService) detectModelTraceAccount(ctx context.Context, account *Account, modelID string) ModelTraceAccountResult {
+	return s.detectModelTraceAccountWithProgress(ctx, account, modelID, nil)
+}
+
+func (s *AccountTestService) detectModelTraceAccountWithProgress(ctx context.Context, account *Account, modelID string, progress modelTraceAccountProgress) ModelTraceAccountResult {
 	startedAt := time.Now()
 	result := ModelTraceAccountResult{
 		AccountID:   account.ID,
@@ -239,6 +268,10 @@ func (s *AccountTestService) detectModelTraceAccount(ctx context.Context, accoun
 		AccountType: account.Type,
 		ModelID:     modelTraceTestModel(account, modelID),
 		Status:      "failed",
+	}
+	result.Status = "running"
+	if progress != nil {
+		progress(result)
 	}
 	challenges := modeltrace.GenerateChallenges(modelTraceMaxAttempts)
 	outputs := make([]modeltrace.Output, 0, modelTraceTargetOutputs)
@@ -251,9 +284,15 @@ func (s *AccountTestService) detectModelTraceAccount(ctx context.Context, accoun
 			break
 		}
 		result.Attempts++
+		if progress != nil {
+			progress(result)
+		}
 		testResult, err := s.RunTestPromptBackground(ctx, account.ID, result.ModelID, challenge.Prompt)
 		if err != nil {
 			result.Errors = append(result.Errors, compactModelTraceError(err.Error()))
+			if progress != nil {
+				progress(result)
+			}
 			continue
 		}
 		if testResult.Status != "success" {
@@ -262,15 +301,25 @@ func (s *AccountTestService) detectModelTraceAccount(ctx context.Context, accoun
 				message = "账号测试未完成"
 			}
 			result.Errors = append(result.Errors, compactModelTraceError(message))
+			if progress != nil {
+				progress(result)
+			}
 			continue
 		}
 		numberCount := len(modeltrace.ParseNumbers(testResult.ResponseText))
 		minimum := maxInt(80, int(math.Ceil(float64(challenge.ExpectedCount)*0.55)))
 		if numberCount < minimum {
 			result.Errors = append(result.Errors, fmt.Sprintf("有效数字不足：%d/%d", numberCount, minimum))
+			if progress != nil {
+				progress(result)
+			}
 			continue
 		}
 		outputs = append(outputs, modeltrace.Output{Text: testResult.ResponseText, ExpectedCount: challenge.ExpectedCount})
+		result.UsedOutputs = len(outputs)
+		if progress != nil {
+			progress(result)
+		}
 	}
 	result.UsedOutputs = len(outputs)
 	result.LatencyMS = time.Since(startedAt).Milliseconds()
@@ -279,11 +328,17 @@ func (s *AccountTestService) detectModelTraceAccount(ctx context.Context, accoun
 		if len(result.Errors) > 0 {
 			result.Error = result.Errors[len(result.Errors)-1]
 		}
+		if progress != nil {
+			progress(result)
+		}
 		return result
 	}
 	analysis, err := modeltrace.Analyze(outputs)
 	if err != nil {
 		result.Error = compactModelTraceError(err.Error())
+		if progress != nil {
+			progress(result)
+		}
 		return result
 	}
 	result.Status = "success"
@@ -296,6 +351,9 @@ func (s *AccountTestService) detectModelTraceAccount(ctx context.Context, accoun
 	result.Candidates = analysis.Results
 	if len(result.Candidates) > 3 {
 		result.Candidates = result.Candidates[:3]
+	}
+	if progress != nil {
+		progress(result)
 	}
 	return result
 }
