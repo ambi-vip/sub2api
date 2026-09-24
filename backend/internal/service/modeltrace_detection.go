@@ -24,6 +24,7 @@ type ModelTraceDetectionRequest struct {
 	Scope      string  `json:"scope"`
 	AccountIDs []int64 `json:"account_ids"`
 	GroupID    int64   `json:"group_id"`
+	ModelID    string  `json:"model_id,omitempty"`
 }
 
 type ModelTracePredictionSummary struct {
@@ -84,6 +85,10 @@ func (s *AccountTestService) DetectModelTrace(ctx context.Context, request Model
 	if err != nil {
 		return nil, err
 	}
+	modelID := strings.TrimSpace(request.ModelID)
+	if modelID == "" {
+		modelID = s.modelTraceDefaultModel(ctx)
+	}
 
 	results := make([]ModelTraceAccountResult, len(entries))
 	if len(entries) == 0 {
@@ -108,7 +113,7 @@ func (s *AccountTestService) DetectModelTrace(ctx context.Context, request Model
 					results[index] = ModelTraceAccountResult{AccountID: item.missingID, Status: "failed", Error: "账号不存在或已删除"}
 					continue
 				}
-				results[index] = s.detectModelTraceAccount(groupCtx, item.account)
+				results[index] = s.detectModelTraceAccount(groupCtx, item.account, modelID)
 			}
 			return nil
 		})
@@ -225,14 +230,14 @@ func (s *AccountTestService) resolveModelTraceAccounts(ctx context.Context, requ
 	}
 }
 
-func (s *AccountTestService) detectModelTraceAccount(ctx context.Context, account *Account) ModelTraceAccountResult {
+func (s *AccountTestService) detectModelTraceAccount(ctx context.Context, account *Account, modelID string) ModelTraceAccountResult {
 	startedAt := time.Now()
 	result := ModelTraceAccountResult{
 		AccountID:   account.ID,
 		AccountName: account.Name,
 		Platform:    account.Platform,
 		AccountType: account.Type,
-		ModelID:     modelTraceTestModel(account),
+		ModelID:     modelTraceTestModel(account, modelID),
 		Status:      "failed",
 	}
 	challenges := modeltrace.GenerateChallenges(modelTraceMaxAttempts)
@@ -295,7 +300,21 @@ func (s *AccountTestService) detectModelTraceAccount(ctx context.Context, accoun
 	return result
 }
 
-func modelTraceTestModel(account *Account) string {
+func (s *AccountTestService) modelTraceDefaultModel(ctx context.Context) string {
+	if s == nil || s.settingService == nil {
+		return ""
+	}
+	settings, err := s.settingService.GetAllSettings(ctx)
+	if err != nil || settings == nil {
+		return ""
+	}
+	return strings.TrimSpace(settings.ModelTraceDefaultModel)
+}
+
+func modelTraceTestModel(account *Account, preferred string) string {
+	if preferred = strings.TrimSpace(preferred); preferred != "" {
+		return preferred
+	}
 	switch account.Platform {
 	case PlatformOpenAI:
 		return openai.DefaultTestModel

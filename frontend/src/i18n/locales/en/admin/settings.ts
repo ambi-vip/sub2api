@@ -86,6 +86,15 @@ export default {
           cyberSessionBlockHint: 'When enabled, sessions hit by upstream cyber_policy are blocked locally for the TTL and no longer forwarded. Only the offending session is blocked; other sessions on the same key are unaffected.',
           cyberSessionBlockTTL: 'Block TTL (seconds)',
         },
+        modelTrace: {
+          title: 'ModelTrace Model Attribution',
+          description: 'Control the standalone ModelTrace detection page and configure the model used when a detection does not specify one.',
+          enabled: 'Show ModelTrace Detection Menu',
+          enabledHint: 'When enabled, the standalone ModelTrace detection page appears in the admin sidebar.',
+          defaultModel: 'Default detection model',
+          defaultModelPlaceholder: 'Leave empty to use each platform\'s built-in default model',
+          defaultModelHint: 'Used when the detection page selects “Backend default model”. The model is attempted for every selected account, so verify that the target accounts support it.',
+        },
         affiliate: {
           title: 'Affiliate (Invite Rebate)',
           description: 'Existing users invite new ones; the inviter earns a percentage rebate on the invitee’s recharges. Disabled by default.',

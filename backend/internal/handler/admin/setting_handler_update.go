@@ -355,10 +355,11 @@ type UpdateSettingsRequest struct {
 	SubscriptionEnabled *bool `json:"subscription_enabled"`
 
 	// Model Plaza feature switches + description
-	ModelPlazaEnabled     *bool   `json:"model_plaza_enabled"`
-	ModelPlazaRequireAuth *bool   `json:"model_plaza_require_auth"`
-	ModelPlazaDescription *string `json:"model_plaza_description"`
-	ModelTraceEnabled     *bool   `json:"modeltrace_enabled"`
+	ModelPlazaEnabled      *bool   `json:"model_plaza_enabled"`
+	ModelPlazaRequireAuth  *bool   `json:"model_plaza_require_auth"`
+	ModelPlazaDescription  *string `json:"model_plaza_description"`
+	ModelTraceEnabled      *bool   `json:"modeltrace_enabled"`
+	ModelTraceDefaultModel *string `json:"modeltrace_default_model"`
 
 	// Plugin management menu visibility switch; plugin runtime is unaffected.
 	PluginManagementEnabled *bool `json:"plugin_management_enabled"`
@@ -2034,6 +2035,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.ModelTraceEnabled
 		}(),
+		ModelTraceDefaultModel: func() string {
+			if req.ModelTraceDefaultModel != nil {
+				return strings.TrimSpace(*req.ModelTraceDefaultModel)
+			}
+			return previousSettings.ModelTraceDefaultModel
+		}(),
 		PluginManagementEnabled: func() bool {
 			if req.PluginManagementEnabled != nil {
 				return *req.PluginManagementEnabled
@@ -2474,6 +2481,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		ModelPlazaRequireAuth:   updatedSettings.ModelPlazaRequireAuth,
 		ModelPlazaDescription:   updatedSettings.ModelPlazaDescription,
 		ModelTraceEnabled:       updatedSettings.ModelTraceEnabled,
+		ModelTraceDefaultModel:  updatedSettings.ModelTraceDefaultModel,
 		PluginManagementEnabled: updatedSettings.PluginManagementEnabled,
 
 		AffiliateEnabled: updatedSettings.AffiliateEnabled,

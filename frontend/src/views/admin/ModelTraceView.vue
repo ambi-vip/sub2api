@@ -11,6 +11,36 @@
       </div>
 
       <section class="card space-y-5 p-5 md:p-6">
+        <div class="max-w-xl">
+          <label for="modeltrace-model" class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">
+            {{ t('admin.accounts.modelTrace.detectionModel') }}
+          </label>
+          <select
+            id="modeltrace-model"
+            v-model="modelChoice"
+            class="input w-full"
+            :disabled="running || settingsLoading"
+          >
+            <option value="">
+              {{ t('admin.accounts.modelTrace.backendDefaultModel', { model: configuredDefaultModel || t('admin.accounts.modelTrace.platformDefaultModel') }) }}
+            </option>
+            <option v-for="model in suggestedModels" :key="model" :value="model">{{ model }}</option>
+            <option value="custom">{{ t('admin.accounts.modelTrace.customModel') }}</option>
+          </select>
+          <input
+            v-if="modelChoice === 'custom'"
+            v-model="customModelID"
+            type="text"
+            class="input mt-2 w-full font-mono text-sm"
+            :placeholder="t('admin.accounts.modelTrace.customModelPlaceholder')"
+            :disabled="running"
+            maxlength="200"
+          />
+          <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+            {{ t('admin.accounts.modelTrace.detectionModelHint') }}
+          </p>
+        </div>
+
         <div class="grid gap-3 md:grid-cols-3">
           <label
             v-for="option in scopeOptions"
@@ -68,7 +98,7 @@
         </div>
 
         <div class="flex justify-end">
-          <button class="btn btn-primary" :disabled="!canRun || running" @click="runDetection">
+          <button class="btn btn-primary" :disabled="!canRun || running || groupsLoading" @click="runDetection">
             <span v-if="running" class="inline-flex items-center gap-2">
               <span class="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"></span>
               {{ t('admin.accounts.modelTrace.running') }}
@@ -94,17 +124,52 @@
           </div>
         </div>
 
-        <div v-if="response.predictions.length" class="rounded-lg border border-gray-200 dark:border-dark-600">
+        <div v-if="predictionRows.length" class="rounded-lg border border-gray-200 dark:border-dark-600">
           <div class="border-b border-gray-200 px-3 py-2 text-sm font-semibold text-gray-900 dark:border-dark-600 dark:text-white">
             {{ t('admin.accounts.modelTrace.summary') }}
           </div>
           <div class="divide-y divide-gray-100 dark:divide-dark-600">
-            <div v-for="prediction in response.predictions" :key="prediction.prediction" class="flex items-center justify-between gap-4 px-3 py-2 text-sm">
+            <div v-for="prediction in predictionRows" :key="prediction.prediction" class="flex items-center justify-between gap-4 px-3 py-2 text-sm">
               <span class="font-medium text-gray-800 dark:text-gray-100">{{ prediction.prediction_name }}</span>
               <span class="text-gray-600 dark:text-gray-300">
                 {{ t('admin.accounts.modelTrace.predictionCount', { count: prediction.count }) }} · {{ percentage(prediction.average_probability) }}%
               </span>
             </div>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div class="flex min-w-0 flex-1 items-center gap-2">
+            <input
+              v-model="resultSearch"
+              type="search"
+              class="input min-w-0 flex-1 md:max-w-md"
+              :placeholder="t('admin.accounts.modelTrace.resultSearchPlaceholder')"
+              :disabled="running"
+            />
+            <span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.modelTrace.showingResults', { shown: filteredResults.length, total: resultRows.length }) }}
+            </span>
+          </div>
+          <div class="flex shrink-0 items-center gap-2">
+            <div class="flex rounded-lg border border-gray-200 p-0.5 dark:border-dark-600" role="group">
+              <button
+                v-for="filter in resultFilters"
+                :key="filter.value"
+                type="button"
+                class="rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors"
+                :class="resultFilter === filter.value
+                  ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300'
+                  : 'text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-dark-700'"
+                :aria-pressed="resultFilter === filter.value"
+                @click="resultFilter = filter.value"
+              >
+                {{ filter.label }}
+              </button>
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm" :disabled="running" @click="clearResults">
+              {{ t('admin.accounts.modelTrace.clearResults') }}
+            </button>
           </div>
         </div>
 
@@ -119,7 +184,7 @@
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
-              <tr v-for="item in response.results" :key="`${item.account_id}-${item.account_name}`" class="align-top">
+              <tr v-for="item in filteredResults" :key="`${item.account_id}-${item.account_name}`" class="align-top">
                 <td class="px-3 py-2">
                   <div class="font-medium text-gray-900 dark:text-white">{{ item.account_name || `#${item.account_id}` }}</div>
                   <div class="text-xs text-gray-500 dark:text-gray-400">{{ item.platform }} · #{{ item.account_id }}</div>
@@ -144,8 +209,10 @@
                   </div>
                 </td>
               </tr>
-              <tr v-if="response.results.length === 0">
-                <td colspan="4" class="px-3 py-6 text-center text-gray-500 dark:text-gray-400">{{ t('admin.accounts.modelTrace.noAccounts') }}</td>
+              <tr v-if="filteredResults.length === 0">
+                <td colspan="4" class="px-3 py-6 text-center text-gray-500 dark:text-gray-400">
+                  {{ resultRows.length === 0 ? t('admin.accounts.modelTrace.noAccounts') : t('admin.accounts.modelTrace.noMatchingResults') }}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -172,9 +239,16 @@ const groupID = ref(0)
 const accountIDsText = ref('')
 const groups = ref<AdminGroup[]>([])
 const groupsLoading = ref(false)
+const settingsLoading = ref(false)
 const running = ref(false)
 const requestError = ref('')
 const response = ref<ModelTraceDetectionResponse | null>(null)
+const resultSearch = ref('')
+const resultFilter = ref<'all' | 'success' | 'failed'>('all')
+const modelChoice = ref('')
+const customModelID = ref('')
+const configuredDefaultModel = ref('')
+const suggestedModels = ['gpt-5.4', 'claude-sonnet-4-6', 'gemini-2.0-flash', 'grok-4.5']
 
 const scopeOptions = computed(() => [
   { value: 'all' as const, label: t('admin.accounts.modelTrace.all'), hint: t('admin.accounts.modelTrace.allHint') },
@@ -191,27 +265,66 @@ const selectedAccountIds = computed(() => {
 const canRun = computed(() => {
   if (scope.value === 'selected') return selectedAccountIds.value.length > 0
   if (scope.value === 'group') return groupID.value > 0
+  if (modelChoice.value === 'custom') return customModelID.value.trim().length > 0
   return true
+})
+const selectedModelID = computed(() => {
+  if (modelChoice.value === 'custom') return customModelID.value.trim()
+  return modelChoice.value.trim()
+})
+const resultRows = computed(() => (Array.isArray(response.value?.results) ? response.value.results : []))
+const predictionRows = computed(() => (Array.isArray(response.value?.predictions) ? response.value.predictions : []))
+const resultFilters = computed(() => [
+  { value: 'all' as const, label: t('admin.accounts.modelTrace.resultFilterAll') },
+  { value: 'success' as const, label: t('admin.accounts.modelTrace.resultFilterSuccess') },
+  { value: 'failed' as const, label: t('admin.accounts.modelTrace.resultFilterFailed') },
+])
+const filteredResults = computed(() => {
+  const query = resultSearch.value.trim().toLowerCase()
+  return resultRows.value.filter((item) => {
+    if (resultFilter.value !== 'all' && item.status !== resultFilter.value) return false
+    if (!query) return true
+    return [item.account_name, item.platform, item.model_id, item.prediction_name, item.family_name]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(query))
+  })
 })
 
 onMounted(async () => {
   groupsLoading.value = true
-  try {
-    groups.value = await adminAPI.groups.getAll()
-  } catch (error) {
-    requestError.value = extractApiErrorMessage(error, t('admin.accounts.modelTrace.failed'))
-  } finally {
-    groupsLoading.value = false
+  settingsLoading.value = true
+  const [groupsResult, settingsResult] = await Promise.allSettled([
+    adminAPI.groups.getAll(),
+    adminAPI.settings.getSettings(),
+  ])
+  if (groupsResult.status === 'fulfilled') {
+    groups.value = groupsResult.value
+  } else {
+    requestError.value = extractApiErrorMessage(groupsResult.reason, t('admin.accounts.modelTrace.failed'))
   }
+  if (settingsResult.status === 'fulfilled') {
+    configuredDefaultModel.value = settingsResult.value.modeltrace_default_model?.trim() || ''
+  }
+  groupsLoading.value = false
+  settingsLoading.value = false
 })
 
-watch([scope, groupID, accountIDsText], () => {
+watch([scope, groupID, accountIDsText, modelChoice, customModelID], () => {
   response.value = null
   requestError.value = ''
+  resultSearch.value = ''
+  resultFilter.value = 'all'
 })
 
 function percentage(value: number) {
   return (value * 100).toFixed(1)
+}
+
+function clearResults() {
+  response.value = null
+  resultSearch.value = ''
+  resultFilter.value = 'all'
+  requestError.value = ''
 }
 
 async function runDetection() {
@@ -222,6 +335,7 @@ async function runDetection() {
   try {
     response.value = await adminAPI.accounts.detectModelTrace({
       scope: scope.value,
+      ...(selectedModelID.value ? { model_id: selectedModelID.value } : {}),
       ...(scope.value === 'selected' ? { account_ids: selectedAccountIds.value } : {}),
       ...(scope.value === 'group' ? { group_id: groupID.value } : {}),
     })

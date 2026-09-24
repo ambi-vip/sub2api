@@ -6800,18 +6800,6 @@
               </p>
             </div>
             <div class="space-y-4 p-6">
-              <div class="flex items-center justify-between gap-4 rounded-lg border border-primary-100 bg-primary-50/60 p-4 dark:border-primary-900/40 dark:bg-primary-900/10">
-                <div>
-                  <label class="text-sm font-medium text-gray-900 dark:text-white">
-                    {{ t('admin.settings.customMenu.modelTraceEnabled') }}
-                  </label>
-                  <p class="mt-0.5 text-xs text-gray-600 dark:text-gray-400">
-                    {{ t('admin.settings.customMenu.modelTraceEnabledHint') }}
-                  </p>
-                </div>
-                <Toggle v-model="form.modeltrace_enabled" />
-              </div>
-
               <!-- Existing menu items -->
               <div
                 v-for="(item, index) in form.custom_menu_items"
@@ -7530,6 +7518,46 @@
                 min="1"
                 class="input"
               />
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+              {{ t('admin.settings.features.modelTrace.title') }}
+            </h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {{ t('admin.settings.features.modelTrace.description') }}
+            </p>
+          </div>
+          <div class="space-y-5 p-6">
+            <div class="flex items-center justify-between gap-4">
+              <div>
+                <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t('admin.settings.features.modelTrace.enabled') }}
+                </label>
+                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t('admin.settings.features.modelTrace.enabledHint') }}
+                </p>
+              </div>
+              <Toggle v-model="form.modeltrace_enabled" />
+            </div>
+
+            <div>
+              <label class="input-label">
+                {{ t('admin.settings.features.modelTrace.defaultModel') }}
+              </label>
+              <input
+                v-model="form.modeltrace_default_model"
+                type="text"
+                class="input"
+                :placeholder="t('admin.settings.features.modelTrace.defaultModelPlaceholder')"
+                maxlength="200"
+              />
+              <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                {{ t('admin.settings.features.modelTrace.defaultModelHint') }}
+              </p>
             </div>
           </div>
         </div>
@@ -9873,6 +9901,7 @@ const form = reactive<SettingsForm>({
     hide_open_button?: boolean;
   }>,
   modeltrace_enabled: false,
+  modeltrace_default_model: "",
   custom_endpoints: [] as Array<{
     name: string;
     endpoint: string;
@@ -11817,6 +11846,7 @@ async function saveSettings() {
       model_plaza_require_auth: form.model_plaza_require_auth,
       model_plaza_description: form.model_plaza_description,
       modeltrace_enabled: form.modeltrace_enabled,
+      modeltrace_default_model: form.modeltrace_default_model.trim(),
       plugin_management_enabled: form.plugin_management_enabled,
       // Affiliate (邀请返利) feature switch
       affiliate_enabled: form.affiliate_enabled,

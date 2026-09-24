@@ -562,6 +562,10 @@ const (
 	// SettingKeyModelTraceEnabled controls the admin-only ModelTrace sidebar page.
 	SettingKeyModelTraceEnabled = "modeltrace_enabled"
 
+	// SettingKeyModelTraceDefaultModel stores the optional model ID used by
+	// ModelTrace when a detection request does not provide an explicit model.
+	SettingKeyModelTraceDefaultModel = "modeltrace_default_model"
+
 	// SettingKeyPluginManagementEnabled controls sidebar visibility only; it does
 	// not stop or otherwise change already loaded plugin runtimes.
 	SettingKeyPluginManagementEnabled = "plugin_management_enabled"

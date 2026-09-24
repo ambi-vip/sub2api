@@ -210,6 +210,7 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyModelPlazaRequireAuth:   "false",
 		SettingKeyModelPlazaDescription:   "",
 		SettingKeyModelTraceEnabled:       "false",
+		SettingKeyModelTraceDefaultModel:  "",
 		SettingKeyPluginManagementEnabled: "false",
 
 		// Affiliate (邀请返利) feature (default disabled; opt-in)
@@ -836,6 +837,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	result.ModelPlazaRequireAuth = settings[SettingKeyModelPlazaRequireAuth] == "true"
 	result.ModelPlazaDescription = settings[SettingKeyModelPlazaDescription]
 	result.ModelTraceEnabled = settings[SettingKeyModelTraceEnabled] == "true"
+	result.ModelTraceDefaultModel = strings.TrimSpace(settings[SettingKeyModelTraceDefaultModel])
 	result.PluginManagementEnabled = settings[SettingKeyPluginManagementEnabled] == "true"
 
 	// Affiliate (邀请返利) feature (default: disabled; strict true)

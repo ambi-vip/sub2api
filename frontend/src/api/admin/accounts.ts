@@ -390,9 +390,27 @@ export async function detectModelTrace(payload: {
   scope: 'all' | 'selected' | 'group'
   account_ids?: number[]
   group_id?: number
+  model_id?: string
 }): Promise<ModelTraceDetectionResponse> {
   const { data } = await apiClient.post<ModelTraceDetectionResponse>('/admin/accounts/modeltrace/detect', payload, { timeout: 0 })
-  return data
+  // Older servers and partially failed upstream responses may serialize array
+  // fields as null. Keep the UI contract stable at the API boundary.
+  const response = (data ?? {}) as Partial<ModelTraceDetectionResponse>
+  return {
+    scope: response.scope ?? payload.scope,
+    total: Number.isFinite(response.total) ? response.total! : 0,
+    detected: Number.isFinite(response.detected) ? response.detected! : 0,
+    failed: Number.isFinite(response.failed) ? response.failed! : 0,
+    method: response.method ?? '',
+    predictions: Array.isArray(response.predictions) ? response.predictions : [],
+    results: Array.isArray(response.results)
+      ? response.results.map((item) => ({
+          ...item,
+          candidates: Array.isArray(item?.candidates) ? item.candidates : [],
+          errors: Array.isArray(item?.errors) ? item.errors : [],
+        }))
+      : [],
+  }
 }
 
 /**

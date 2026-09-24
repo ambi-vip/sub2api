@@ -2,6 +2,7 @@ package admin
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -36,6 +37,11 @@ func (h *AccountHandler) DetectModelTrace(c *gin.Context) {
 	}
 	if request.Scope == "group" && request.GroupID <= 0 {
 		response.BadRequest(c, "group_id must be a positive ID")
+		return
+	}
+	request.ModelID = strings.TrimSpace(request.ModelID)
+	if len(request.ModelID) > 200 {
+		response.BadRequest(c, "model_id must be at most 200 characters")
 		return
 	}
 	result, err := h.accountTestService.DetectModelTrace(c.Request.Context(), request)

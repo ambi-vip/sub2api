@@ -68,12 +68,12 @@
           </div>
         </div>
 
-        <div v-if="response.predictions.length" class="rounded-lg border border-gray-200 dark:border-dark-600">
+        <div v-if="predictionRows.length" class="rounded-lg border border-gray-200 dark:border-dark-600">
           <div class="border-b border-gray-200 px-3 py-2 text-sm font-semibold text-gray-900 dark:border-dark-600 dark:text-white">
             {{ t('admin.accounts.modelTrace.summary') }}
           </div>
           <div class="divide-y divide-gray-100 dark:divide-dark-600">
-            <div v-for="prediction in response.predictions" :key="prediction.prediction" class="flex items-center justify-between gap-4 px-3 py-2 text-sm">
+            <div v-for="prediction in predictionRows" :key="prediction.prediction" class="flex items-center justify-between gap-4 px-3 py-2 text-sm">
               <span class="font-medium text-gray-800 dark:text-gray-100">{{ prediction.prediction_name }}</span>
               <span class="text-gray-600 dark:text-gray-300">
                 {{ t('admin.accounts.modelTrace.predictionCount', { count: prediction.count }) }} · {{ percentage(prediction.average_probability) }}%
@@ -93,7 +93,7 @@
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
-              <tr v-for="item in response.results" :key="`${item.account_id}-${item.account_name}`" class="align-top">
+              <tr v-for="item in resultRows" :key="`${item.account_id}-${item.account_name}`" class="align-top">
                 <td class="px-3 py-2">
                   <div class="font-medium text-gray-900 dark:text-white">{{ item.account_name || `#${item.account_id}` }}</div>
                   <div class="text-xs text-gray-500 dark:text-gray-400">{{ item.platform }} · #{{ item.account_id }}</div>
@@ -118,7 +118,7 @@
                   </div>
                 </td>
               </tr>
-              <tr v-if="response.results.length === 0">
+              <tr v-if="resultRows.length === 0">
                 <td colspan="4" class="px-3 py-6 text-center text-gray-500 dark:text-gray-400">{{ t('admin.accounts.modelTrace.noAccounts') }}</td>
               </tr>
             </tbody>
@@ -170,6 +170,9 @@ const groupID = ref(0)
 const running = ref(false)
 const requestError = ref('')
 const response = ref<ModelTraceDetectionResponse | null>(null)
+
+const predictionRows = computed(() => (Array.isArray(response.value?.predictions) ? response.value.predictions : []))
+const resultRows = computed(() => (Array.isArray(response.value?.results) ? response.value.results : []))
 
 const scopeOptions = computed(() => [
   { value: 'all' as const, label: t('admin.accounts.modelTrace.all'), hint: t('admin.accounts.modelTrace.allHint') },

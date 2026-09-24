@@ -86,6 +86,15 @@ export default {
           cyberSessionBlockHint: '开启后,被上游网络安全策略(cyber_policy)拦截的会话将在 TTL 内被本地屏蔽,不再发往上游。仅屏蔽该会话,不影响同 Key 其他会话。',
           cyberSessionBlockTTL: '屏蔽时长(秒)',
         },
+        modelTrace: {
+          title: 'ModelTrace 模型归因检测',
+          description: '控制独立的 ModelTrace 检测页面，并配置未指定检测模型时使用的默认模型。',
+          enabled: '显示 ModelTrace 检测菜单',
+          enabledHint: '开启后在管理员侧边栏显示独立的 ModelTrace 检测页面。',
+          defaultModel: '默认检测模型',
+          defaultModelPlaceholder: '留空表示按账号平台使用系统默认模型',
+          defaultModelHint: '检测页面选择“后台默认模型”时使用。该模型会尝试用于所有选中的账号，请确认目标账号支持该模型。',
+        },
         affiliate: {
           title: '邀请返利',
           description: '老用户邀请新用户注册，新用户充值后老用户按比例获得返利额度。默认关闭。',
