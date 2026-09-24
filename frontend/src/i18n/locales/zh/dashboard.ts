@@ -155,6 +155,18 @@ export default {
     lastUsedAt: '上次使用时间',
     lastUsedIP: '最近使用 IP',
     useKey: '使用密钥',
+    quickConfigure: '一键配置',
+    quickConfigureModal: {
+      title: '一键配置 Codex',
+      description: '下载对应平台脚本并运行。脚本会使用当前 API 密钥的 API Key Mode 配置 Codex，并覆盖写入 Codex 配置文件。',
+      warning: '脚本内含当前 API 密钥，请仅在本人电脑上运行，不要分享或提交到代码仓库。',
+      macLinux: 'macOS / Linux',
+      windows: 'Windows',
+      copy: '复制脚本',
+      copied: '已复制',
+      download: '下载脚本',
+      runTitle: '运行方式',
+    },
     useKeyModal: {
       title: '使用 API 密钥',
       description: '将以下环境变量添加到您的终端配置文件或直接在终端中运行。',

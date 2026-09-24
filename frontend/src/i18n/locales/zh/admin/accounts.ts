@@ -21,8 +21,8 @@ export default {
       dataActions: '数据操作',
       toolActions: '工具',
       modelTrace: {
-        launch: 'ModelTrace 检测',
-        title: 'ModelTrace 模型归因检测',
+        launch: '模型检测',
+        title: '模型归因检测',
         description: '向所选账号的测试模型发送数字选择挑战，并使用 ModelTrace 指纹库估计模型家族和版本。',
         all: '全部账号',
         allHint: '检测系统中的全部账号',

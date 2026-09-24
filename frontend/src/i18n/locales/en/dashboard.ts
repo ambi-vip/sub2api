@@ -155,6 +155,18 @@ export default {
     lastUsedAt: 'Last Used',
     lastUsedIP: 'Last Used IP',
     useKey: 'Use Key',
+    quickConfigure: 'Quick Setup',
+    quickConfigureModal: {
+      title: 'Quick Codex Setup',
+      description: 'Download the script for your platform and run it. It configures Codex in API Key Mode with this API key and overwrites the Codex configuration file.',
+      warning: 'The script contains this API key. Run it only on your own computer and never share or commit it.',
+      macLinux: 'macOS / Linux',
+      windows: 'Windows',
+      copy: 'Copy Script',
+      copied: 'Copied',
+      download: 'Download Script',
+      runTitle: 'Run with',
+    },
     useKeyModal: {
       title: 'Use API Key',
       description:
