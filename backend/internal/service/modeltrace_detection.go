@@ -77,8 +77,9 @@ type ModelTraceDetectionResponse struct {
 }
 
 type modelTraceAccountEntry struct {
-	account   *Account
-	missingID int64
+	account    *Account
+	missingID  int64
+	skipReason string
 }
 
 // DetectModelTrace resolves the requested account scope and probes each account
@@ -122,6 +123,10 @@ func (s *AccountTestService) DetectModelTrace(ctx context.Context, request Model
 				item := entries[index]
 				if item.account == nil {
 					results[index] = ModelTraceAccountResult{AccountID: item.missingID, Status: "failed", Error: "账号不存在或已删除"}
+					continue
+				}
+				if item.skipReason != "" {
+					results[index] = modelTraceSkippedResult(item.account, modelID, item.skipReason)
 					continue
 				}
 				results[index] = s.detectModelTraceAccount(groupCtx, item.account, modelID)
@@ -223,14 +228,7 @@ func (s *AccountTestService) resolveModelTraceAccounts(ctx context.Context, requ
 				accountByID[account.ID] = account
 			}
 		}
-		entries := make([]modelTraceAccountEntry, 0, len(accounts))
-		for _, id := range ids {
-			account := accountByID[id]
-			if isEligibleModelTraceAccount(account) {
-				entries = append(entries, modelTraceAccountEntry{account: account})
-			}
-		}
-		return entries, nil
+		return buildModelTraceSelectedEntries(ids, accountByID), nil
 	default:
 		return nil, fmt.Errorf("scope must be all, selected, or group")
 	}
@@ -241,6 +239,55 @@ func (s *AccountTestService) resolveModelTraceAccounts(ctx context.Context, requ
 // or rate-limit state is intentionally left to the normal account test path.
 func isEligibleModelTraceAccount(account *Account) bool {
 	return account != nil && account.Status == StatusActive && account.Schedulable
+}
+
+// buildModelTraceSelectedEntries keeps every explicitly selected account in the
+// batch. Accounts that cannot be probed (missing, disabled, paused) still get a
+// result row carrying the skip reason, so the response never contains fewer
+// accounts than the admin selected.
+func buildModelTraceSelectedEntries(ids []int64, accountByID map[int64]*Account) []modelTraceAccountEntry {
+	entries := make([]modelTraceAccountEntry, 0, len(ids))
+	for _, id := range ids {
+		account := accountByID[id]
+		if account == nil {
+			entries = append(entries, modelTraceAccountEntry{missingID: id})
+			continue
+		}
+		if reason := modelTraceSkipReason(account); reason != "" {
+			entries = append(entries, modelTraceAccountEntry{account: account, skipReason: reason})
+			continue
+		}
+		entries = append(entries, modelTraceAccountEntry{account: account})
+	}
+	return entries
+}
+
+func modelTraceSkipReason(account *Account) string {
+	if isEligibleModelTraceAccount(account) {
+		return ""
+	}
+	switch account.Status {
+	case StatusActive:
+		return "账号已暂停调度，已跳过检测"
+	case StatusDisabled:
+		return "账号已被禁用，已跳过检测"
+	case StatusError:
+		return "账号处于错误状态，已跳过检测"
+	default:
+		return "账号当前状态不可用，已跳过检测"
+	}
+}
+
+func modelTraceSkippedResult(account *Account, modelID, reason string) ModelTraceAccountResult {
+	return ModelTraceAccountResult{
+		AccountID:   account.ID,
+		AccountName: account.Name,
+		Platform:    account.Platform,
+		AccountType: account.Type,
+		ModelID:     modelTraceTestModel(account, modelID),
+		Status:      "failed",
+		Error:       reason,
+	}
 }
 
 func eligibleModelTraceAccountEntries(accounts []Account) []modelTraceAccountEntry {

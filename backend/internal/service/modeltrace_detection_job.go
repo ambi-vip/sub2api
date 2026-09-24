@@ -55,6 +55,10 @@ func (s *AccountTestService) StartModelTraceDetection(ctx context.Context, reque
 			}
 			continue
 		}
+		if entry.skipReason != "" {
+			results[index] = modelTraceSkippedResult(entry.account, modelID, entry.skipReason)
+			continue
+		}
 		queued++
 		results[index] = ModelTraceAccountResult{
 			AccountID:   entry.account.ID,
@@ -127,7 +131,7 @@ func (s *AccountTestService) runModelTraceDetectionJob(job *modelTraceDetectionJ
 			defer wg.Done()
 			for index := range jobs {
 				entry := entries[index]
-				if entry.account == nil {
+				if entry.account == nil || entry.skipReason != "" {
 					continue
 				}
 				job.updateResult(index, ModelTraceAccountResult{
@@ -146,7 +150,7 @@ func (s *AccountTestService) runModelTraceDetectionJob(job *modelTraceDetectionJ
 		}()
 	}
 	for index, entry := range entries {
-		if entry.account != nil {
+		if entry.account != nil && entry.skipReason == "" {
 			jobs <- index
 		}
 	}

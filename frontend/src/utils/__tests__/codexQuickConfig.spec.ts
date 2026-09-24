@@ -8,6 +8,7 @@ import {
   buildMacLinuxCodexQuickConfigScript,
   buildWindowsCmdCodexQuickConfigScript,
   buildWindowsCodexQuickConfigScript,
+  encodeUtf8Base64,
   normalizeCodexBaseUrl
 } from '@/utils/codexQuickConfig'
 
@@ -29,6 +30,20 @@ describe('codexQuickConfig', () => {
     expect(config).toContain('http_headers = { "x-openai-actor-authorization" = "local-image-extension" }')
     expect(config).toContain('base_url = "https://example.com/v1"')
     expect(config).toContain('model_provider = "OpenAI"')
+    expect(config).not.toContain('model_catalog_json')
+    expect(config).not.toContain('codex-models.json')
+  })
+
+  it('adds the model catalog setting only when a catalog is supplied', () => {
+    const config = buildCodexQuickConfigToml({
+      apiKey: 'sk-quick-test',
+      baseUrl: 'https://example.com',
+      platform: 'openai',
+      modelCatalogContent: '{"models":[{"slug":"gpt-test"}]}',
+      modelCatalogPath: '%USERPROFILE%\\.codex\\codex-models.json'
+    })
+
+    expect(config).toContain('model_catalog_json = "%USERPROFILE%\\\\.codex\\\\codex-models.json"')
   })
 
   it('generates rerunnable scripts for macOS/Linux and Windows', () => {
@@ -58,7 +73,10 @@ describe('codexQuickConfig', () => {
     const decodedConfig = atob(payload!)
       .split('')
       .map((character) => character.charCodeAt(0))
-    expect(new TextDecoder().decode(new Uint8Array(decodedConfig))).toContain('experimental_bearer_token')
+    const decodedWindowsConfig = new TextDecoder().decode(new Uint8Array(decodedConfig))
+    expect(decodedWindowsConfig).toContain('experimental_bearer_token')
+    expect(decodedWindowsConfig).not.toContain('model_catalog_json')
+    expect(decodedWindowsConfig).not.toContain('codex-models.json')
 
     expect(cmdScript).toContain('@echo off')
     expect(cmdScript).toContain('set "CONFIG_DIR=%USERPROFILE%\\.codex"')
@@ -70,9 +88,69 @@ describe('codexQuickConfig', () => {
     const decodedCmdConfig = atob(cmdPayload!)
       .split('')
       .map((character) => character.charCodeAt(0))
-    expect(new TextDecoder().decode(new Uint8Array(decodedCmdConfig))).toContain(
-      'experimental_bearer_token'
+    const decodedCmdConfigText = new TextDecoder().decode(new Uint8Array(decodedCmdConfig))
+    expect(decodedCmdConfigText).toContain('experimental_bearer_token')
+    expect(decodedCmdConfigText).not.toContain('model_catalog_json')
+    expect(decodedCmdConfigText).not.toContain('codex-models.json')
+  })
+
+  it('embeds and overwrites codex-models.json on all supported script formats', () => {
+    const catalog = JSON.stringify({
+      object: 'codex.models',
+      models: [{ slug: 'gpt-test', display_name: 'Test model' }]
+    }, null, 2)
+    const input = {
+      apiKey: 'sk-catalog-test',
+      baseUrl: 'https://example.com/v1',
+      platform: 'openai' as const,
+      modelCatalogContent: catalog,
+      modelCatalogPath: '~/.codex/codex-models.json'
+    }
+
+    const unixScript = buildMacLinuxCodexQuickConfigScript(input)
+    const unixPayload = unixScript.match(/MODEL_CATALOG_PAYLOAD='([^']+)'/)?.[1]
+    expect(unixPayload).toBeDefined()
+    expect(decodeBase64Utf8(unixPayload!)).toBe(catalog)
+    expect(unixScript).toContain('mv -f "${CATALOG_TMP_FILE}" "${CONFIG_DIR}/codex-models.json"')
+
+    const powershellScript = buildWindowsCodexQuickConfigScript(input)
+    const powershellPayload = powershellScript.match(/\$catalogPayload = '([^']+)'/)?.[1]
+    expect(powershellPayload).toBeDefined()
+    expect(decodeBase64Utf8(powershellPayload!)).toBe(catalog)
+    expect(powershellScript).toContain("Move-Item -LiteralPath $catalogTempFile -Destination (Join-Path $configDir 'codex-models.json') -Force")
+
+    const cmdScript = buildWindowsCmdCodexQuickConfigScript(input)
+    const cmdChunks = [...cmdScript.matchAll(/(?:^|\n)(?:> |>> )"%SUB2API_CODEX_CATALOG_TEMP%" echo ([A-Za-z0-9+/=]+)/g)]
+      .map((match) => match[1])
+    expect(cmdChunks.join('')).toBe(encodeUtf8Base64(catalog))
+    expect(cmdScript).toContain('ReadAllText($env:SUB2API_CODEX_CATALOG_TEMP)')
+    expect(cmdScript).toContain('move /Y "%SUB2API_CODEX_CATALOG_TEMP%" "%CONFIG_DIR%\\codex-models.json"')
+    expect(cmdScript).not.toContain('SUB2API_CODEX_CATALOG_PAYLOAD=')
+    expect(cmdScript.indexOf('mkdir "%CONFIG_DIR%"')).toBeLessThan(
+      cmdScript.indexOf('> "%SUB2API_CODEX_CATALOG_TEMP%" echo')
     )
+    expect(cmdScript.indexOf('move /Y "%SUB2API_CODEX_CATALOG_TEMP%"')).toBeLessThan(
+      cmdScript.indexOf('move /Y "%TEMP_FILE%" "%CONFIG_FILE%"')
+    )
+  })
+
+  it('does not write a model catalog when catalog import is disabled', () => {
+    const inputs = {
+      apiKey: 'sk-no-catalog',
+      baseUrl: 'https://example.com/v1',
+      platform: 'openai' as const
+    }
+
+    for (const script of [
+      buildMacLinuxCodexQuickConfigScript(inputs),
+      buildWindowsCodexQuickConfigScript(inputs),
+      buildWindowsCmdCodexQuickConfigScript(inputs)
+    ]) {
+      expect(script).not.toContain('codex-models.json')
+      expect(script).not.toContain('MODEL_CATALOG_PAYLOAD')
+      expect(script).not.toContain('$catalogPayload')
+      expect(script).not.toContain('SUB2API_CODEX_CATALOG_TEMP=%CONFIG_FILE%')
+    }
   })
 
   it('runs the macOS/Linux script and overwrites the existing Codex config', () => {
@@ -97,4 +175,44 @@ describe('codexQuickConfig', () => {
       rmSync(home, { recursive: true, force: true })
     }
   })
+
+  it('runs the macOS/Linux script and overwrites the model catalog', () => {
+    const home = mkdtempSync(join(tmpdir(), 'sub2api-codex-catalog-'))
+    const scriptPath = join(home, 'setup.sh')
+    const catalogPath = join(home, '.codex', 'codex-models.json')
+    const firstCatalog = '{"models":[{"slug":"gpt-first"}]}'
+    const secondCatalog = '{"models":[{"slug":"gpt-second"}]}'
+    try {
+      writeFileSync(scriptPath, buildMacLinuxCodexQuickConfigScript({
+        apiKey: 'sk-runtime-catalog-test',
+        baseUrl: 'https://example.com/v1',
+        platform: 'openai',
+        modelCatalogContent: firstCatalog
+      }))
+      chmodSync(scriptPath, 0o700)
+      execFileSync('bash', [scriptPath], { env: { ...process.env, HOME: home } })
+
+      const configPath = join(home, '.codex', 'config.toml')
+      expect(readFileSync(configPath, 'utf8')).toContain('model_catalog_json = "~/.codex/codex-models.json"')
+      expect(readFileSync(catalogPath, 'utf8')).toBe(firstCatalog)
+
+      writeFileSync(scriptPath, buildMacLinuxCodexQuickConfigScript({
+        apiKey: 'sk-runtime-catalog-test',
+        baseUrl: 'https://example.com/v1',
+        platform: 'openai',
+        modelCatalogContent: secondCatalog
+      }))
+      execFileSync('bash', [scriptPath], { env: { ...process.env, HOME: home } })
+      expect(readFileSync(catalogPath, 'utf8')).toBe(secondCatalog)
+    } finally {
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
 })
+
+function decodeBase64Utf8(value: string): string {
+  const bytes = atob(value)
+    .split('')
+    .map((character) => character.charCodeAt(0))
+  return new TextDecoder().decode(new Uint8Array(bytes))
+}

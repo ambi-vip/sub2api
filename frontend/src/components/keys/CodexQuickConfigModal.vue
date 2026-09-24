@@ -40,12 +40,53 @@
         </button>
       </div>
 
+      <div class="rounded-lg border border-gray-200 p-3 dark:border-dark-700">
+        <label class="flex cursor-pointer items-start gap-3">
+          <input
+            v-model="includeModelCatalog"
+            type="checkbox"
+            class="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-dark-600 dark:bg-dark-800"
+            data-testid="quick-config-import-catalog"
+          />
+          <span class="min-w-0">
+            <span class="block text-sm font-medium text-gray-900 dark:text-white">
+              {{ t('keys.quickConfigureModal.importCatalog') }}
+            </span>
+            <span class="mt-1 block text-xs text-gray-500 dark:text-gray-400">
+              {{ t('keys.quickConfigureModal.importCatalogHint') }}
+            </span>
+          </span>
+        </label>
+        <p
+          v-if="includeModelCatalog && catalogState === 'loading'"
+          class="mt-2 text-xs text-primary-600 dark:text-primary-400"
+          data-testid="quick-config-catalog-loading"
+        >
+          {{ t('keys.quickConfigureModal.importCatalogLoading') }}
+        </p>
+        <p
+          v-else-if="includeModelCatalog && catalogState === 'ready'"
+          class="mt-2 text-xs text-emerald-600 dark:text-emerald-400"
+          data-testid="quick-config-catalog-ready"
+        >
+          {{ t('keys.quickConfigureModal.importCatalogReady', { count: catalogModelCount }) }}
+        </p>
+        <p
+          v-else-if="includeModelCatalog && catalogState === 'error'"
+          class="mt-2 text-xs text-red-600 dark:text-red-400"
+          data-testid="quick-config-catalog-error"
+        >
+          {{ t('keys.quickConfigureModal.importCatalogError') }}
+        </p>
+      </div>
+
       <div class="overflow-hidden rounded-lg bg-gray-900 dark:bg-dark-900">
         <div class="flex items-center justify-between border-b border-gray-700 bg-gray-800 px-4 py-2 dark:bg-dark-800">
           <span class="truncate font-mono text-xs text-gray-400">{{ fileName }}</span>
           <div class="flex items-center gap-2">
             <button
               type="button"
+              :disabled="!scriptReady"
               class="flex items-center gap-1.5 rounded-lg bg-gray-700 px-2.5 py-1 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-600 hover:text-white"
               data-testid="quick-config-copy"
               @click="copyScript"
@@ -55,6 +96,7 @@
             </button>
             <button
               type="button"
+              :disabled="!scriptReady"
               class="flex items-center gap-1.5 rounded-lg bg-primary-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-primary-700"
               data-testid="quick-config-download"
               @click="downloadScript"
@@ -94,6 +136,7 @@ import {
   buildWindowsCmdCodexQuickConfigScript,
   type CodexQuickConfigPlatform
 } from '@/utils/codexQuickConfig'
+import { fetchCodexModelsManifest } from '@/api/codex'
 
 const props = defineProps<{
   show: boolean
@@ -109,12 +152,29 @@ type TargetPlatform = 'unix' | 'windows'
 const detectPlatform = (): TargetPlatform => /windows/i.test(navigator.userAgent) ? 'windows' : 'unix'
 const activePlatform = ref<TargetPlatform>(detectPlatform())
 const copied = ref(false)
+const includeModelCatalog = ref(false)
+type CatalogState = 'idle' | 'loading' | 'ready' | 'error'
+const catalogState = ref<CatalogState>('idle')
+const catalogContent = ref('')
+const catalogModelCount = ref(0)
+let catalogController: AbortController | null = null
+let catalogRequestID = 0
 
 const input = computed(() => ({
   apiKey: props.apiKey,
   baseUrl: props.baseUrl || window.location.origin,
-  platform: props.platform
+  platform: props.platform,
+  modelCatalogContent: includeModelCatalog.value && catalogState.value === 'ready'
+    ? catalogContent.value
+    : undefined,
+  modelCatalogPath: includeModelCatalog.value && catalogState.value === 'ready'
+    ? catalogPath.value
+    : undefined
 }))
+
+const catalogPath = computed(() => activePlatform.value === 'windows'
+  ? '%USERPROFILE%\\.codex\\codex-models.json'
+  : '~/.codex/codex-models.json')
 
 const script = computed(() => activePlatform.value === 'windows'
   ? buildWindowsCmdCodexQuickConfigScript(input.value)
@@ -128,6 +188,8 @@ const runCommand = computed(() => activePlatform.value === 'windows'
   ? t('keys.quickConfigureModal.windowsRun')
   : `chmod +x ${fileName.value} && ./${fileName.value}`)
 
+const scriptReady = computed(() => !includeModelCatalog.value || catalogState.value === 'ready')
+
 const tabClass = (selected: boolean) => [
   'rounded-md px-3 py-2 text-sm font-medium transition-colors',
   selected
@@ -139,8 +201,55 @@ watch(() => props.show, (show) => {
   if (show) {
     activePlatform.value = detectPlatform()
     copied.value = false
+    includeModelCatalog.value = false
+    resetCatalog()
   }
 })
+
+watch(activePlatform, () => {
+  if (includeModelCatalog.value) void loadCatalog()
+})
+
+watch(includeModelCatalog, (enabled) => {
+  if (enabled) {
+    void loadCatalog()
+  } else {
+    resetCatalog()
+  }
+})
+
+function resetCatalog() {
+  catalogController?.abort()
+  catalogController = null
+  catalogRequestID += 1
+  catalogState.value = 'idle'
+  catalogContent.value = ''
+  catalogModelCount.value = 0
+}
+
+async function loadCatalog() {
+  if (!includeModelCatalog.value || !props.apiKey) return
+  catalogController?.abort()
+  const controller = new AbortController()
+  const requestID = ++catalogRequestID
+  catalogController = controller
+  catalogState.value = 'loading'
+  try {
+    const result = await fetchCodexModelsManifest(props.baseUrl, props.apiKey, controller.signal)
+    if (requestID !== catalogRequestID) return
+    catalogContent.value = result.content
+    catalogModelCount.value = result.modelCount
+    catalogState.value = 'ready'
+  } catch (error) {
+    const errorName = error && typeof error === 'object' && 'name' in error
+      ? String((error as { name?: unknown }).name || '')
+      : ''
+    if (requestID !== catalogRequestID || errorName === 'AbortError') return
+    catalogState.value = 'error'
+  } finally {
+    if (requestID === catalogRequestID) catalogController = null
+  }
+}
 
 async function copyScript() {
   try {
