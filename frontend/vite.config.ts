@@ -64,7 +64,9 @@ function injectPublicSettings(backendUrl: string): Plugin {
           if (response.ok) {
             const data = await response.json()
             if (data.code === 0 && data.data) {
-              const script = `<script>window.__APP_CONFIG__=${JSON.stringify(data.data)};</script>`
+              // 转义 < 为 \u003c，防止注入内容（如 home_content 中的 </script>）提前闭合 script 标签
+              const json = JSON.stringify(data.data).replace(/</g, '\\u003c')
+              const script = `<script>window.__APP_CONFIG__=${json};</script>`
               return injectBranding(html, data.data).replace('</head>', `${script}\n</head>`)
             }
           }
