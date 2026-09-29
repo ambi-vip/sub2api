@@ -141,10 +141,12 @@ docs/*
 !docs/COMPOSITE_GROUPS.md
 !docs/PLUGIN_DEVELOPMENT.md
 !docs/channel-monitor-v2-safe-defaults.md
+!docs/quality-bps-observation.md
 !docs/cyber-session-blocking.md
 !docs/request-capture.md
 !docs/codex-credits.md
 !docs/account-token-guard.md
+!docs/priority-scheduling.md
 !docs/legal/
 !docs/legal/*.md
 !docs/screenshots/
@@ -153,6 +155,7 @@ docs/screenshots/*
 !docs/screenshots/codex-referral-dialog.png
 !docs/screenshots/codex-referral-success.png
 !docs/screenshots/bps403-recovery/
+!docs/screenshots/account-cost-multiplier/
 .serena/
 .codex/
 frontend/coverage/
@@ -167,3 +170,6 @@ issues/
 /plugins/
 
 !docs/codex-ticket-pinning.md
+
+!docs/account-auto-config.md
+!docs/screenshots/auto-config/
