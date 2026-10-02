@@ -588,6 +588,8 @@ func batchImageFileExtension(mimeType string) string {
 		return "jpg"
 	case "image/webp":
 		return "webp"
+	case "image/svg+xml":
+		return "svg"
 	default:
 		return ""
 	}

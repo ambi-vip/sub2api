@@ -42,6 +42,11 @@ func TestParseBatchImageResultLine_SuccessShapes(t *testing.T) {
 			wantID: "cover_003", wantMime: "image/webp", wantExt: "webp", wantCount: 1,
 		},
 		{
+			name:   "svg_inline_data",
+			line:   `{"key":"slide-04-melodica","response":{"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/svg+xml","data":"` + batchImageTestData + `"}}]}}]}}`,
+			wantID: "slide-04-melodica", wantMime: "image/svg+xml", wantExt: "svg", wantCount: 1,
+		},
+		{
 			name:   "top_level_candidates",
 			line:   `{"request":{"key":"cover_004"},"candidates":[{"content":{"parts":[{"inline_data":{"mime_type":"image/png","data":"` + batchImageTestData + `"}},{"inlineData":{"mimeType":"image/png","data":"` + batchImageTestData + `"}}]}}]}`,
 			wantID: "cover_004", wantMime: "image/png", wantExt: "png", wantCount: 2,
