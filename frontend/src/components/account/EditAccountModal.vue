@@ -31,6 +31,29 @@
         <p class="input-hint">{{ t('priorityScheduling.modelAliasesHint') }}</p>
       </div>
 
+      <div
+        v-if="account.platform === 'openai' && account.type === 'oauth' && !isSparkShadow"
+        class="rounded-lg border border-gray-200 p-3 dark:border-dark-600"
+        data-testid="openai-prism-browser-oauth-settings"
+      >
+        <label class="flex items-center gap-2 text-sm">
+          <input v-model="prismBrowserEnabled" type="checkbox" data-testid="openai-prism-browser-oauth-toggle" />
+          <span>{{ t('admin.accounts.openai.prismBrowser') }}</span>
+        </label>
+        <p class="input-hint">{{ t('admin.accounts.openai.prismBrowserDesc') }}</p>
+        <fieldset v-if="prismBrowserEnabled" class="mt-3" data-testid="prism-model-scope">
+          <legend class="input-label">{{ t('admin.accounts.openai.prismBrowserModels') }}</legend>
+          <div class="grid grid-cols-2 gap-2">
+            <label v-for="model in prismSupportedModels" :key="model" class="flex items-center gap-2 text-sm">
+              <input v-model="prismBrowserModels" type="checkbox" :value="model" :data-testid="`prism-model-${model}`" />
+              <span>{{ model }}</span>
+            </label>
+          </div>
+          <p class="input-hint">{{ t('admin.accounts.openai.prismBrowserModelsHint') }}</p>
+          <p class="mt-2 text-xs text-primary-600 dark:text-primary-400">{{ t('admin.accounts.openai.prismBrowserManagedEndpoint') }}</p>
+        </fieldset>
+      </div>
+
       <!-- API Key fields (only for apikey type) -->
       <div v-if="account.type === 'apikey'" class="space-y-4">
         <div v-if="!isCNApiKeyAccount || editApiProtocol !== 'adaptive'">
@@ -304,7 +327,7 @@
 
             <!-- Whitelist Mode -->
             <div v-if="modelRestrictionMode === 'whitelist'">
-              <ModelWhitelistSelector v-model="allowedModels" :platform="account?.platform || 'anthropic'" :account-id="account?.id" />
+              <ModelWhitelistSelector v-model="allowedModels" :model-mappings="modelMappings" :platform="account?.platform || 'anthropic'" :account-id="account?.id" />
               <p class="text-xs text-gray-500 dark:text-gray-400">
                 {{ t('admin.accounts.selectedModels', { count: allowedModels.length }) }}
                 <span v-if="allowedModels.length === 0 && modelMappings.length === 0">{{
@@ -784,7 +807,7 @@
 
           <!-- Whitelist Mode -->
           <div v-if="modelRestrictionMode === 'whitelist'">
-            <ModelWhitelistSelector v-model="allowedModels" :platform="account?.platform || 'anthropic'" :account-id="account?.id" />
+            <ModelWhitelistSelector v-model="allowedModels" :model-mappings="modelMappings" :platform="account?.platform || 'anthropic'" :account-id="account?.id" />
             <p class="text-xs text-gray-500 dark:text-gray-400">
               {{ t('admin.accounts.selectedModels', { count: allowedModels.length }) }}
               <span v-if="allowedModels.length === 0 && modelMappings.length === 0">{{
@@ -996,7 +1019,7 @@
 
           <!-- Whitelist Mode -->
           <div v-if="modelRestrictionMode === 'whitelist'">
-            <ModelWhitelistSelector v-model="allowedModels" :platform="account?.platform || 'anthropic'" :account-id="account?.id" />
+            <ModelWhitelistSelector v-model="allowedModels" :model-mappings="modelMappings" :platform="account?.platform || 'anthropic'" :account-id="account?.id" />
             <p class="text-xs text-gray-500 dark:text-gray-400">
               {{ t('admin.accounts.selectedModels', { count: allowedModels.length }) }}
               <span v-if="allowedModels.length === 0 && modelMappings.length === 0">{{
@@ -1218,7 +1241,7 @@
 
           <!-- Whitelist Mode -->
           <div v-if="modelRestrictionMode === 'whitelist'">
-            <ModelWhitelistSelector v-model="allowedModels" platform="anthropic" />
+            <ModelWhitelistSelector v-model="allowedModels" :model-mappings="modelMappings" platform="anthropic" />
             <p class="text-xs text-gray-500 dark:text-gray-400">
               {{ t('admin.accounts.selectedModels', { count: allowedModels.length }) }}
               <span v-if="allowedModels.length === 0 && modelMappings.length === 0">{{ t('admin.accounts.supportsAllModels') }}</span>
@@ -3559,6 +3582,9 @@ interface TempUnschedRuleForm {
 const submitting = ref(false)
 const editBaseUrl = ref('https://api.anthropic.com')
 const editApiKey = ref('')
+const prismBrowserEnabled = ref(false)
+const prismSupportedModels = ['gpt-6.1-sol', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-6-luna']
+const prismBrowserModels = ref<string[]>([...prismSupportedModels])
 
 // ── 国产供应商（Kimi / Zhipu / DeepSeek）account_mode / api_protocol 编辑 ──
 // account_mode 决定额度/余额监控路径，api_protocol 决定转发端点与格式；
@@ -4240,6 +4266,7 @@ const defaultBaseUrl = computed(() => {
   if (props.account?.platform === 'openai') return 'https://api.openai.com'
   if (props.account?.platform === 'gemini') return 'https://generativelanguage.googleapis.com'
   if (props.account?.platform === 'grok') return 'https://api.x.ai/v1'
+  if (props.account?.platform === 'typesafe') return 'https://api.typesafe.ai'
   // CN 供应商：按当前模式/协议回落到官方预设（清空输入框提交时使用），
   // 不能落到 anthropic 默认值（会被当 CC base 拼出错误端点）。
   if (
@@ -4444,6 +4471,8 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   excelBPSIgnoreEncryptedContent.value = false
   excelBPSAutoMoveOn403.value = false
   excelBPS403TargetGroupID.value = ''
+  prismBrowserEnabled.value = false
+  prismBrowserModels.value = [...prismSupportedModels]
   copilotSDKEnabled.value = false
   openaiPassthroughEnabled.value = false
   openaiFlattenNamespacesEnabled.value = false
@@ -4464,6 +4493,12 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   anthropicAPIKeyAuthScheme.value = 'x_api_key'
   webSearchEmulationMode.value = 'default'
   if (newAccount.platform === 'openai' && (newAccount.type === 'oauth' || newAccount.type === 'setup-token' || newAccount.type === 'apikey')) {
+    prismBrowserEnabled.value = newAccount.type === 'oauth' && extra?.openai_prism_browser === true
+    if (Object.prototype.hasOwnProperty.call(extra ?? {}, 'openai_prism_browser_models')) {
+      prismBrowserModels.value = Array.isArray(extra?.openai_prism_browser_models)
+        ? extra.openai_prism_browser_models.filter((model): model is string => typeof model === 'string' && prismSupportedModels.includes(model))
+        : []
+    }
     excelBPSEnabled.value = newAccount.type === 'oauth' && extra?.openai_excel_bps === true
     excelBPSMode.value = extra?.openai_excel_bps_config_mode === 'defaults' ? 'defaults' : 'initial'
     excelBPSAllModels.value = excelBPSEnabled.value && !Object.prototype.hasOwnProperty.call(extra ?? {}, 'openai_excel_bps_models')
@@ -4738,6 +4773,8 @@ const syncFormFromAccount = (newAccount: Account | null) => {
           ? 'https://generativelanguage.googleapis.com'
           : newAccount.platform === 'grok'
             ? 'https://api.x.ai/v1'
+            : newAccount.platform === 'typesafe'
+              ? 'https://api.typesafe.ai'
             : newAccount.platform === 'kimi' ||
                 newAccount.platform === 'zhipu' ||
                 newAccount.platform === 'deepseek' ||
@@ -6107,6 +6144,15 @@ const handleSubmit = async () => {
         delete newExtra.openai_compact_mode
       } else {
         newExtra.openai_compact_mode = openAICompactMode.value
+      }
+      if (props.account.type === 'oauth') {
+        if (prismBrowserEnabled.value) {
+          newExtra.openai_prism_browser = true
+          newExtra.openai_prism_browser_models = prismSupportedModels.filter(model => prismBrowserModels.value.includes(model))
+        } else {
+          delete newExtra.openai_prism_browser
+          delete newExtra.openai_prism_browser_models
+        }
       }
 		if (props.account.type === 'apikey') {
         if (!openAITextGenerationCapabilityEnabled.value || openAIResponsesMode.value === 'auto') {

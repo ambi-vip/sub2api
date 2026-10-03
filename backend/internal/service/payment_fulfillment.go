@@ -761,7 +761,8 @@ func (s *PaymentService) affiliateRebateBaseAmount(ctx context.Context, o *dbent
 	}
 	switch o.OrderType {
 	case payment.OrderTypeBalance:
-		return o.Amount, defaultBalanceRechargeMultiplier, nil
+		// 返利只按实充部分计算，赠送额度不参与
+		return paymentOrderAmountWithoutBonus(o), defaultBalanceRechargeMultiplier, nil
 	case payment.OrderTypeSubscription:
 		multiplier := defaultBalanceRechargeMultiplier
 		if s.configService != nil {
