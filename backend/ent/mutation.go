@@ -30415,8 +30415,8 @@ type PaymentOrderMutation struct {
 	addpay_amount             *float64
 	fee_rate                  *float64
 	addfee_rate               *float64
-	bonus_amount             *float64
-	addbonus_amount          *float64
+	bonus_amount              *float64
+	addbonus_amount           *float64
 	recharge_code             *string
 	out_trade_no              *string
 	payment_type              *string
@@ -32520,7 +32520,7 @@ func (m *PaymentOrderMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *PaymentOrderMutation) Fields() []string {
-	fields := make([]string, 0, 40)
+	fields := make([]string, 0, 41)
 	if m.user != nil {
 		fields = append(fields, paymentorder.FieldUserID)
 	}
