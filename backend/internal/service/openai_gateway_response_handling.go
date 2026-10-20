@@ -549,6 +549,9 @@ func (s *OpenAIGatewayService) handleStreamingResponseWithReasoning(ctx context.
 				if failedMessage == "" {
 					failedMessage = "Upstream response failed"
 				}
+				if isOpenAIInvalidEncryptedContentEvent(dataBytes) {
+					markOpenAIStreamInvalidEncryptedContent(c)
+				}
 				if account != nil && account.IsGrok() {
 					status := openAIStreamFailureStatus(dataBytes, failedMessage)
 					if isGrokContentPolicyRejection(http.StatusForbidden, dataBytes) {
