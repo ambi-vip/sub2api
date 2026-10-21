@@ -1,3 +1,5 @@
+import securityRecords from './securityRecords'
+import siwc from './siwc'
 import priorityScheduling from './priorityScheduling'
 import qualityOps from './qualityOps'
 import controlledExperiments from './controlledExperiments'
@@ -21,6 +23,8 @@ import requestTiming from './requestTiming'
 import autoConfig from './autoConfig'
 
 export default {
+  securityRecords,
+  siwc,
   autoConfig,
   priorityScheduling,
   qualityOps,

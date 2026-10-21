@@ -91,6 +91,7 @@ func prismBrowserResponsesURL(baseURL string) string {
 
 // Forward forwards request to OpenAI API
 func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (result *OpenAIForwardResult, resultErr error) {
+	ctx = s.withOpenAIHTTPBudget(ctx, c)
 	var finishMeter func(*OpenAIForwardResult, error) error
 	var meterErr error
 	ctx, finishMeter, meterErr = s.beginRegionalMeter(ctx, c, account, body)
@@ -174,6 +175,9 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	modelForBPS := gjson.GetBytes(body, "model").String()
 	if err := s.checkControlledRoute(ctx, c, account, modelForBPS); err != nil {
 		return nil, err
+	}
+	if account.IsSIWCEnabled() {
+		return s.forwardSIWC(ctx, c, account, body, startTime)
 	}
 	if !account.IsExcelOAuth() && account.IsPrismBrowserEnabledForModel(modelForBPS) && s.prismBrowserGloballyEnabled(ctx) {
 		return s.forwardPrismBrowser(withOpenAITransportMode(ctx, "prism_browser"), c, account, body, startTime)
@@ -1041,7 +1045,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			// 触发上游拒绝与重连。摘要取自进场形态的 body（密文项只可能来自
 			// 客户端进场请求，重复摘要幂等）。
 			invalidDigests := collectOpenAIEncryptedContentDigestsRaw(lineageEntryBody)
-			removedReasoningItems := trimOpenAIEncryptedReasoningItems(wsReqBody)
+			removedReasoningItems := trimOpenAIEncryptedReasoningItemsForRecovery(wsReqBody)
 			if !removedReasoningItems {
 				logOpenAIWSModeInfo(
 					"reconnect_invalid_encrypted_content_recovery_skip account_id=%d attempt=%d reason=missing_encrypted_reasoning_items",
@@ -1319,6 +1323,14 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		upstreamStart := time.Now()
 		resp, err := s.doOpenAIUpstream(upstreamReq, proxyURL, account)
 		SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
+		var phaseTimeout *openAIHTTPPhaseTimeout
+		if errors.As(err, &phaseTimeout) {
+			if headerGuard != nil {
+				headerGuard.close()
+			}
+			return nil, handleOpenAIHTTPPhaseError(c, account, err)
+		}
+
 		if errors.Is(err, ErrCodexTicketResponseRejected) {
 			if headerGuard != nil {
 				headerGuard.close()
@@ -1382,7 +1394,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 					return nil, decodeErr
 				}
 				invalidDigests := collectOpenAIEncryptedContentDigestsRaw(lineageEntryBody)
-				if trimOpenAIEncryptedReasoningItems(decoded) {
+				if trimOpenAIEncryptedReasoningItemsForRecovery(decoded) {
 					body, err = marshalOpenAIUpstreamJSON(decoded)
 					if err != nil {
 						return nil, fmt.Errorf("serialize invalid_encrypted_content retry body: %w", err)
@@ -1486,6 +1498,10 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		if reqStream {
 			_ = takeOpenAIStreamInvalidEncryptedContent(c)
 			streamResult, err := s.handleStreamingResponseWithReasoning(ctx, resp, c, account, startTime, originalModel, upstreamModel, reasoningEffortValue)
+			if phaseErr := openAIHTTPPhaseError(resp); phaseErr != nil {
+				return nil, handleOpenAIHTTPPhaseError(c, account, phaseErr)
+			}
+
 			if err != nil {
 				if takeOpenAIStreamInvalidEncryptedContent(c) {
 					markInvalidEncryptedContentLineage("http")
@@ -1536,6 +1552,9 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			searchCount = streamResult.searchCount
 		} else {
 			nonStreamResult, err := s.handleNonStreamingResponse(ctx, resp, c, account, originalModel, upstreamModel)
+			if phaseErr := openAIHTTPPhaseError(resp); phaseErr != nil {
+				return nil, handleOpenAIHTTPPhaseError(c, account, phaseErr)
+			}
 			if err != nil {
 				if signal, ok := asOpenAICompactFallbackSignal(err); ok {
 					if retryBody, fallbackModel, retry := s.prepareOpenAICompactFallbackRetry(
@@ -1805,6 +1824,9 @@ func shouldAdaptDeepSeekResponsesClientTools(account *Account, body []byte, comp
 
 func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Context, account *Account, body []byte, token string, isStream bool, promptCacheKey string, isCodexCLI bool) (*http.Request, error) {
 	defer requesttiming.Observe(ctx, "build_upstream_request")()
+	if account.IsSIWCEnabled() {
+		return s.buildSIWCRequest(ctx, c, body, token)
+	}
 	if codexAccountIdentitySource(c, account).IsExcelOAuth() {
 		return nil, errExcelOAuthRouteUnavailable
 	}

@@ -1,5 +1,8 @@
+import ipRisk from './ipRisk'
+
 export default {
     settings: {
+      ipRisk,
       title: '系统设置',
       description: '管理注册、邮箱验证、默认值和 SMTP 设置',
       tabs: {
@@ -244,6 +247,8 @@ export default {
       },
       security: {
         loginRateLimit: '登录限流',
+        registrationIPLimit: '同 IP 注册数量限制',
+        registrationIPLimitHint: '默认开启，同一 IP 最多注册 2 个账号（含邮箱和第三方登录注册）。共享网络可能导致正常用户受限。关闭仅取消此数量限制，不影响验证码、邮箱验证、请求限流和登录防护；保存后立即生效。已有计数不会清空，关闭期间不累计，重新开启后继续使用保留的计数。',
         loginRateLimitHint: '默认开启。限制登录请求频率，15 分钟内验证失败 10 次后封禁 IP 1 小时。关闭后，密码、二次验证、Passkey 及第三方绑定登录将跳过频率限制和 IP 封禁；保存后立即生效，对管理员和普通用户均有效。已有封禁在重新开启后仍按原有效期生效。',
         passkey: 'Passkey 登录',
         passkeyHint: '当依赖方配置有效时，允许无密码登录及用户自行管理 Passkey。',
@@ -1399,6 +1404,10 @@ export default {
       cache_rate_to_users: {
         label: '向用户展示缓存率',
         description: '开启后，用户在自己的用量页也能看到单条请求的缓存率。默认关闭，仅管理端可见。',
+      },
+      upstream_response_model_to_users: {
+        label: '向用户展示上游实际响应模型',
+        description: '开启后，用户在用量记录中可以看到上游响应里声明的实际模型。默认关闭，仅管理端可见。不影响计费，也不会展示映射后的请求模型或账号信息。',
       },
       saveSettings: '保存设置',
       saving: '保存中...',
