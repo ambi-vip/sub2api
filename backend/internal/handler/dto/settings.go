@@ -41,6 +41,7 @@ type SystemSettings struct {
 	PrismBrowserAPIKeyConfigured        bool                            `json:"prism_browser_api_key_configured"`
 	EmailVerifyEnabled                  bool                            `json:"email_verify_enabled"`
 	RegistrationEmailSuffixWhitelist    []string                        `json:"registration_email_suffix_whitelist"`
+	RegistrationEmailAliasBlockEnabled  bool                            `json:"registration_email_alias_block_enabled"`
 	RegistrationEmailDomainQuotaEnabled bool                            `json:"registration_email_domain_quota_enabled"`
 	PromoCodeEnabled                    bool                            `json:"promo_code_enabled"`
 	PasswordResetEnabled                bool                            `json:"password_reset_enabled"`

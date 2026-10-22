@@ -1287,6 +1287,15 @@ func (s *RateLimitService) handle429Cooldown(ctx context.Context, account *Accou
 	}
 	// 1. OpenAI 平台：优先尝试解析 x-codex-* 响应头（用于 rate_limit_exceeded）
 	if account.Platform == PlatformOpenAI {
+		// An API key may relay a different ChatGPT account's quota error. Its
+		// reset time and Codex snapshot do not describe this key's capacity.
+		// Keep real 429 backoff without blocking the entire key for that window.
+		// Provider-specific quota handling above and explicit account policies
+		// remain authoritative.
+		if account.Type == AccountTypeAPIKey {
+			s.apply429FallbackRateLimit(ctx, account, "openai_apikey_upstream_429")
+			return
+		}
 		persistOpenAI429PlanType(ctx, s.accountRepo, account, responseBody)
 		s.persistOpenAICodexSnapshot(ctx, account, headers)
 		notifyOpenAIAutoReset(account.ID)
@@ -1992,7 +2001,9 @@ func parseOpenAIRateLimitPlanType(body []byte) string {
 }
 
 func persistOpenAI429PlanType(ctx context.Context, repo AccountRepository, account *Account, body []byte) {
-	if repo == nil || account == nil || account.Platform != PlatformOpenAI {
+	// API keys may proxy a different account's quota errors. Its plan_type must
+	// never classify our API key; only ChatGPT credentials have a local plan.
+	if repo == nil || account == nil || !account.IsOpenAIOAuthLike() {
 		return
 	}
 	// spark 影子账号恒不持凭据:即便收到带 plan_type 的 429,也不能把 plan_type 写进影子 credentials

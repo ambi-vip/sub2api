@@ -414,6 +414,7 @@ export interface SystemSettings {
   registration_ip_limit_enabled: boolean;
   email_verify_enabled: boolean;
   registration_email_suffix_whitelist: string[];
+  registration_email_alias_block_enabled: boolean;
   registration_email_domain_quota_enabled: boolean;
   promo_code_enabled: boolean;
   password_reset_enabled: boolean;
@@ -821,6 +822,7 @@ export interface UpdateSettingsRequest {
   registration_ip_limit_enabled?: boolean;
   email_verify_enabled?: boolean;
   registration_email_suffix_whitelist?: string[];
+  registration_email_alias_block_enabled?: boolean;
   registration_email_domain_quota_enabled?: boolean;
   promo_code_enabled?: boolean;
   password_reset_enabled?: boolean;

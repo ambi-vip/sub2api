@@ -8,11 +8,14 @@ import (
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/cyberevidence"
 	"github.com/Wei-Shaw/sub2api/internal/payment"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/qualityqueue"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/redissession"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/google/wire"
 	"github.com/redis/go-redis/v9"
@@ -134,9 +137,13 @@ func ProvideOpenAIOAuthReauthService(
 	runtimeBlocker AccountRuntimeBlocker,
 	buildInfo BuildInfo,
 	settings SettingRepository,
+	redisClient *redis.Client,
 ) *OpenAIOAuthReauthService {
 	credentialUpdater, _ := accountRepo.(OpenAIOAuthReauthCredentialUpdater)
 	svc := NewOpenAIOAuthReauthService(repo, adminService, credentialUpdater, openaiOAuthService, secretEncryptor, cfg != nil && cfg.Totp.EncryptionKeyConfigured, tokenCacheInvalidator, runtimeBlocker)
+	if redisClient != nil {
+		svc.siwcSessionStore = redissession.New(redisClient, siwcSessionPrefix, openai.SessionTTL)
+	}
 	svc.SetSessionExportRepository(sessionExportRepo)
 	svc.settings = settings
 	if admin, ok := adminService.(*adminServiceImpl); ok {
@@ -941,8 +948,11 @@ func ProvideBillingCacheService(
 	rateRepo UserGroupRateRepository,
 	cfg *config.Config,
 	userPlatformQuotaRepo UserPlatformQuotaRepository,
+	balanceNotifyService *BalanceNotifyService,
 ) *BillingCacheService {
-	return NewBillingCacheService(cache, userRepo, subRepo, apiKeyRepo, rpmCache, rateRepo, cfg, userPlatformQuotaRepo)
+	svc := NewBillingCacheService(cache, userRepo, subRepo, apiKeyRepo, rpmCache, rateRepo, cfg, userPlatformQuotaRepo)
+	svc.SetBalanceRejectionNotifier(balanceNotifyService)
+	return svc
 }
 
 // ProvideAPIKeyService wires APIKeyService and connects rate-limit cache invalidation.
@@ -960,6 +970,9 @@ func ProvideAPIKeyService(
 ) (*APIKeyService, error) {
 	svc := NewAPIKeyService(apiKeyRepo, userRepo, groupRepo, userSubRepo, userGroupRateRepo, cache, cfg)
 	svc.SetRateLimitCacheInvalidator(billingCacheService)
+	if billingCacheService != nil {
+		svc.SetBalanceRejectionNotifier(billingCacheService.balanceRejectionNotifier)
+	}
 	svc.SetConcurrencyService(concurrencyService)
 	if cfg != nil && cfg.Runtime.RegionalAuthFile != "" {
 		runtime, err := startRegionalAuthRuntime(cfg, authority)
@@ -1111,7 +1124,7 @@ var ProviderSet = wire.NewSet(
 	wire.Bind(new(ChannelCacheInvalidator), new(*ChannelService)),
 	NewModelPricingResolver,
 	NewModelPlazaService,
-	NewContentModerationService,
+	ProvideContentModerationService,
 	NewAffiliateService,
 	ProvidePaymentConfigService,
 	ProvidePaymentService,
@@ -1272,4 +1285,11 @@ func ProvideCRSSyncService(accounts AccountRepository, proxies ProxyRepository, 
 	defaults := &adminServiceImpl{settingService: settings, groupRepo: groups}
 	svc.autoConfigure = defaults.ApplyOAuthAutoConfig
 	return svc
+}
+
+// ProvideContentModerationService reuses the existing fixed TOTP AES-GCM key.
+func ProvideContentModerationService(settings SettingRepository, repo ContentModerationRepository, hashes ContentModerationHashCache, groups GroupRepository, users UserRepository, proxies ProxyRepository, invalidator APIKeyAuthCacheInvalidator, email *EmailService, db *sql.DB, cipher SecretEncryptor, cfg *config.Config) *ContentModerationService {
+	s := NewContentModerationService(settings, repo, hashes, groups, users, proxies, invalidator, email)
+	s.cyberEvidence = cyberevidence.New(cyberevidence.NewSQLStore(db), cipher, cfg != nil && cfg.Totp.EncryptionKeyConfigured)
+	return s
 }
