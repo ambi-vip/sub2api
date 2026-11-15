@@ -31,6 +31,7 @@ const openAIWSHTTPBridgeToolStateContextKey = "openai_ws_http_bridge_tool_state"
 
 type openAIWSHTTPBridgeToolState struct {
 	ClientMapping apicompat.ResponsesClientToolMapping
+	ClientTools   json.RawMessage // declarations before lowering; inherited by an omitted-tools turn
 	LoweredTools  json.RawMessage
 }
 
@@ -48,6 +49,7 @@ func setOpenAIWSHTTPBridgeToolState(c *gin.Context, state openAIWSHTTPBridgeTool
 		return
 	}
 	state.LoweredTools = append(json.RawMessage(nil), state.LoweredTools...)
+	state.ClientTools = append(json.RawMessage(nil), state.ClientTools...)
 	c.Set(openAIWSHTTPBridgeToolStateContextKey, state)
 }
 
@@ -490,6 +492,10 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			}
 		}
 		inheritedState, _ := openAIWSHTTPBridgeToolStateFromContext(c)
+		clientTools := inheritedState.ClientTools
+		if currentTools, present := openAIWSHTTPBridgeRawField(body, "tools"); present {
+			clientTools = currentTools
+		}
 		inheritedLoweredTools := decodeOpenAIWSHTTPBridgeLoweredTools(inheritedState.LoweredTools)
 		body, clientToolMapping, err = adaptResponsesClientToolsForFunctionUpstreamWithMapping(
 			body,
@@ -514,6 +520,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		}
 		setOpenAIWSHTTPBridgeToolState(c, openAIWSHTTPBridgeToolState{
 			ClientMapping: clientToolMapping,
+			ClientTools:   clientTools,
 			LoweredTools:  loweredTools,
 		})
 	}
@@ -607,6 +614,10 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 				account.ID,
 				admissionErr,
 			)
+			if forwardStart.IsZero() {
+				source, _ := ctx.Value(openAIWSAgentSourceKey{}).([]byte)
+				admissionErr = openAIWSUnsentTurn(admissionErr, source, originalModel, turn)
+			}
 			return nil, admissionErr
 		}
 		// Freeze the first-send boundary. Rejected-field network attempts remain
@@ -817,7 +828,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			return nil
 		}
 		if !failureAccountSideEffectsApplied {
-			failureAccountSideEffectsApplied = s.handleOpenAIWSFailureAccountSideEffects(ctx, account, mappedModel, resp.Header, bareErrorPayload)
+			failureAccountSideEffectsApplied = s.handleOpenAIWSFailureAccountSideEffects(openAIWSForwardStreamPhaseContext(ctx, wroteDownstream, bareErrorPayload), account, mappedModel, resp.Header, bareErrorPayload)
 		}
 		upstreamTerminalEvent = "response.failed"
 		if clientDisconnected {
@@ -981,7 +992,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			}
 			if account.Platform != PlatformGrok && !failureAccountSideEffectsApplied {
 				if eventType == "response.failed" || (!officialOpenAIResponses && shouldFailover && !requestScopedCapacity) {
-					failureAccountSideEffectsApplied = s.handleOpenAIWSFailureAccountSideEffects(ctx, account, mappedModel, resp.Header, upstreamMessage)
+					failureAccountSideEffectsApplied = s.handleOpenAIWSFailureAccountSideEffects(openAIWSForwardStreamPhaseContext(ctx, wroteDownstream, upstreamMessage), account, mappedModel, resp.Header, upstreamMessage)
 				}
 			}
 			if wroteDownstream && requestScopedCapacity && !capacityFailoverSuppressedLogged {
