@@ -662,6 +662,7 @@ export interface AdminGroup extends Group {
   i18n?: GroupI18n
   force_openai_fast: boolean
   free_openai_fast: boolean
+  free_openai_ultrafast: boolean
   // 仅允许流式请求（管理端请求策略，用户侧分组不返回）
   stream_only: boolean
   codex_cli_only?: boolean
@@ -863,6 +864,7 @@ export interface CreateGroupRequest {
   long_context_pricing_enabled?: boolean
   force_openai_fast?: boolean
   free_openai_fast?: boolean
+  free_openai_ultrafast?: boolean
   stream_only?: boolean
   codex_cli_only?: boolean
   block_subagents?: boolean
@@ -934,6 +936,7 @@ export interface UpdateGroupRequest {
   long_context_pricing_enabled?: boolean
   force_openai_fast?: boolean
   free_openai_fast?: boolean
+  free_openai_ultrafast?: boolean
   stream_only?: boolean
   codex_cli_only?: boolean
   block_subagents?: boolean
@@ -1780,6 +1783,8 @@ export interface OpenAIResponsesState {
 }
 
 export interface CreateAccountRequest {
+  provider_id?: number
+  provider_key_id?: string
   upstream_channel_id?: number
   confirm_upstream_channel_binding?: boolean
   name: string
@@ -2015,7 +2020,32 @@ export type UsageRequestType = 'unknown' | 'sync' | 'stream' | 'ws_v2' | 'cyber'
 export type ImageSizeSource = 'output' | 'input' | 'default' | 'legacy'
 export type ImageSizeBreakdown = Record<string, number>
 
+// Immutable display evidence from the Standard calculation that set actual_cost.
+export type CustomerCacheCostKind = 'read' | 'read_image' | 'write' | 'write_5m' | 'write_1h' | 'write_30m' | 'write_12h'
+export interface CustomerCacheCostDetail {
+  kind: CustomerCacheCostKind
+  tokens: number
+  unit_price: number
+}
+
+export interface CustomerCostDetails {
+  cache_cost_details?: CustomerCacheCostDetail[]
+  version: number
+  free_fast: boolean
+  free_ultrafast?: boolean
+  input_cost: number
+  output_cost: number
+  image_input_cost: number
+  image_output_cost: number
+  cache_creation_cost: number
+  cache_read_cost: number
+  total_cost: number
+  actual_cost: number
+  multiplier: number
+}
+
 export interface UsageLog {
+  customer_cost_details?: CustomerCostDetails | null
   id: number
   user_id: number
   api_key_id: number
@@ -2768,6 +2798,8 @@ export interface QualityBPSPolicy {
   models: string[]
   omit_unsupported_tools: boolean
   ignore_encrypted_content: boolean
+  web_search?: boolean
+  web_search_auto?: boolean
   auto_disable_on_403: boolean
   auto_recover_on_403?: boolean
   recovery_interval_minutes?: number
