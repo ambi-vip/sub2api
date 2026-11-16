@@ -323,7 +323,9 @@ const legacyBPSAuthorizationPending = computed(() =>
 const isBPSAccount = computed(() =>
   isOpenAIAccount.value && props.account?.type === 'oauth' && props.account?.extra?.openai_excel_bps === true && props.account?.extra?.openai_excel_bps_authorization_pending !== true
 )
-const openAITestModeOptions = computed(() => isBPSAccount.value
+const openAITestModeOptions = computed(() => props.account?.extra?.openai_cpa_bps === true
+  ? [{ value: 'default', label: t('admin.accounts.openai.testModeDefault') }]
+  : isBPSAccount.value
   ? [
       { value: 'default', label: t('admin.accounts.openai.testModeDefault') },
       { value: 'bps_tools', label: t('admin.accounts.openai.testModeBPSTools') }

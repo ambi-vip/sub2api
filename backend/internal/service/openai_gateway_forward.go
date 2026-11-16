@@ -122,7 +122,9 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	}
 	defer func() { resultErr = regionalMeterFinishForward(ctx, result, resultErr, finishMeter) }()
 	ctx = s.withRequestTimezoneEgress(ctx, account)
-	body = s.normalizeRequestTimezone(ctx, account, body, "http")
+	if !account.IsCPABPSEnabled() {
+		body = s.normalizeRequestTimezone(ctx, account, body, "http")
+	}
 	if astraSchedulingAppliesToRequest(s.cfg.AstraRouting(ctx), account, gjson.GetBytes(body, "model").String(), getOpenAIGroupIDFromContext(c)) {
 		if err := s.checkAstraSchedulingRoute(ctx, account); err != nil {
 			return nil, err
@@ -163,11 +165,13 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	if shouldForwardOpenAIResponsesViaChatCompletions(account, body) {
 		SetActualOpenAIUpstreamEndpoint(c, "/v1/chat/completions")
 	}
-	filteredBody, filterErr := filterOpenAIResponsesNoneReasoningEffortForAccount(account, body)
-	if filterErr != nil {
-		return nil, filterErr
+	if !account.IsCPABPSEnabled() {
+		filteredBody, filterErr := filterOpenAIResponsesNoneReasoningEffortForAccount(account, body)
+		if filterErr != nil {
+			return nil, filterErr
+		}
+		body = filteredBody
 	}
-	body = filteredBody
 	clearGrokResponsesClientToolMapping(c)
 	clearOpenAIResponsesClientToolMapping(c)
 	clearOpenAIResponsesNamespaceNames(c)
@@ -207,6 +211,9 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	modelForBPS := gjson.GetBytes(body, "model").String()
 	if err := s.checkControlledRoute(ctx, c, account, modelForBPS); err != nil {
 		return nil, err
+	}
+	if account.IsCPABPSEnabled() {
+		return s.forwardCPABPS(ctx, c, account, body, startTime)
 	}
 	if account.IsSIWCEnabled() {
 		return s.forwardSIWC(ctx, c, account, body, startTime)
@@ -1805,7 +1812,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 }
 
 func shouldForwardOpenAIResponsesViaRawChatCompletions(account *Account) bool {
-	if account.IsCopilotSDKEnabled() {
+	if account.IsCPABPSEnabled() || account.IsCopilotSDKEnabled() {
 		return false
 	}
 	if account == nil || account.Type != AccountTypeAPIKey {
@@ -1836,7 +1843,7 @@ func shouldForwardOpenAIResponsesViaRawChatCompletions(account *Account) bool {
 // 路由判定：账号级协议配置或探测结论要求回退，或者入站请求的形状是当前上游无法
 // 正确处理的（见 shouldForwardDeepSeekResponsesLiteViaChatCompletions）。
 func shouldForwardOpenAIResponsesViaChatCompletions(account *Account, body []byte) bool {
-	if account.IsCopilotSDKEnabled() {
+	if account.IsCPABPSEnabled() || account.IsCopilotSDKEnabled() {
 		return false
 	}
 	return shouldForwardOpenAIResponsesViaRawChatCompletions(account) ||

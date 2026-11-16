@@ -742,6 +742,9 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 
 	setOpsRequestContext(c, "", false)
 	sessionHashBody := body
+	// CPA owns compatibility transforms; retain ingress bytes before generic history/compact rewrites.
+	cpaBPSOriginalBody := append([]byte(nil), body...)
+	cpaBPSOriginalPath := c.Request.URL.Path
 	body, ok = h.normalizeOpenAIResponsesCompactRequest(c, reqLog, body)
 	if !ok {
 		return
@@ -756,8 +759,9 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	// body-signal compact：上游 unary 等待期间向下游发 SSE 注释行心跳，防止
 	// 反向代理空闲超时掐断长压缩连接（#3887）。首拍延迟一个心跳间隔，快速
 	// 失败仍走 JSON+状态码链路；未标记客户端流式或间隔为 0 时是 no-op。
-	stopCompactKeepalive := service.StartOpenAICompactSSEKeepalive(c, h.openAICompactKeepaliveInterval())
-	defer stopCompactKeepalive()
+	stopCompactKeepalive := func() {}
+	compactKeepaliveStarted := false
+	defer func() { stopCompactKeepalive() }()
 
 	// 校验请求体 JSON 合法性
 	if !gjson.ValidBytes(body) {
@@ -905,10 +909,8 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		legacyCompact,
 	))
 
-	// 提前校验 function_call_output 是否具备可关联上下文，避免上游 400。
-	if !h.validateFunctionCallOutputRequest(c, body, reqLog) {
-		return
-	}
+	// Tool-output validation is account-specific: CPA delegates orphan cleanup
+	// to its original compatibility proxy after selection.
 
 	// 绑定错误透传服务，允许 service 层在非 failover 错误场景复用规则。
 	if h.errorPassthroughService != nil {
@@ -1091,6 +1093,9 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 				reqLog.Info("openai.account_select_aborted_client_disconnected", zap.Error(err))
 				return
 			}
+			if !h.validateFunctionCallOutputRequest(c, body, reqLog) {
+				return
+			}
 			err = rpmAdmission.selectionError(err)
 			if isOpenAIRPMError(err) {
 				rpmAdmission.retryAfter(c, err)
@@ -1146,6 +1151,25 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			zap.Float64("load_skew", scheduleDecision.LoadSkew),
 		)
 		account := selection.Account
+		// CPA owns its wire response; do not commit a local compact heartbeat
+		// before knowing which upstream mode will handle the request.
+		if !account.IsCPABPSEnabled() && !compactKeepaliveStarted {
+			stopCompactKeepalive = service.StartOpenAICompactSSEKeepalive(c, h.openAICompactKeepaliveInterval())
+			compactKeepaliveStarted = true
+		}
+		if !account.IsCPABPSEnabled() && !h.validateFunctionCallOutputRequest(c, body, reqLog) {
+			if selection.ReleaseFunc != nil {
+				selection.ReleaseFunc()
+			}
+			return
+		}
+		if account.IsCPABPSEnabled() && mustDiscardUnownedPointer {
+			if selection.ReleaseFunc != nil {
+				selection.ReleaseFunc()
+			}
+			h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "previous_response_id is not available for this user")
+			return
+		}
 		if previousResponseID != "" && requestPlatform == service.PlatformOpenAI && !account.IsOpenAIApiKey() {
 			// The public Responses HTTP API supports previous_response_id on API-key
 			// accounts. OAuth/SetupToken upstreams do not, so keep searching instead
@@ -1208,6 +1232,16 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		// 从不可变的 canonical forwardBody 派生本次尝试 body 并整块剔除上游私有的加密
 		// reasoning item（含耦合的 id/summary），避免非透传上游 400 拒绝 Kiro reasoning 形态。
 		attemptBody := h.deriveOpenAIForwardAttemptBody(reqLog, forwardBody, account, &passthroughFailoverState)
+		if account.IsCPABPSEnabled() {
+			stopCompactKeepalive()
+			// Keep only the explicit group/channel model mapping. CPA receives the
+			// original tools, reasoning, history and endpoint without a second cleanup.
+			attemptBody = cpaBPSOriginalBody
+			if model := gjson.GetBytes(forwardBody, "model").String(); model != gjson.GetBytes(attemptBody, "model").String() {
+				attemptBody, _ = sjson.SetBytes(attemptBody, "model", model)
+			}
+			c.Request.URL.Path = cpaBPSOriginalPath
+		}
 		result, err := func() (*service.OpenAIForwardResult, error) {
 			defer func() {
 				if accountReleaseFunc != nil {
@@ -4890,6 +4924,10 @@ func openAIForwardErrorAlreadyCommunicated(c *gin.Context, writerSizeBeforeForwa
 	if service.OpenAICompactKeepaliveAdjustedWrittenSize(c) == writerSizeBeforeForward ||
 		service.OpenAIImagesJSONKeepaliveAdjustedWrittenSize(c) == writerSizeBeforeForward {
 		return false
+	}
+	var cpa *service.CPABPSForwardError
+	if errors.As(err, &cpa) && cpa.ResponseWritten {
+		return true
 	}
 	var incomplete *service.OpenAIWSSSEIncompleteError
 	if errors.As(err, &incomplete) && incomplete.ResponseWritten {

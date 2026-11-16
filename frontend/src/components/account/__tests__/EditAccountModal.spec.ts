@@ -1029,6 +1029,24 @@ describe('EditAccountModal', () => {
     expect(mountModal(buildAccount()).find('[data-testid="excel-bps-toggle"]').exists()).toBe(false)
   })
 
+  it('loads CPA-BPS, preserves redacted credentials and supports disabling the mode', async () => {
+    const account = buildAccount()
+    account.extra = { openai_cpa_bps: true, unrelated_setting: 'keep' }
+    updateAccountMock.mockReset().mockResolvedValue(account)
+    checkMixedChannelRiskMock.mockReset().mockResolvedValue({ has_risk: false })
+    const wrapper = mountModal(account)
+    expect(wrapper.get<HTMLInputElement>('[data-testid="cpa-bps-toggle"]').element.checked).toBe(true)
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.openai_cpa_bps).toBe(true)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.credentials?.api_protocol).toBe('responses')
+    await wrapper.get('[data-testid="cpa-bps-toggle"]').setValue(false)
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(updateAccountMock.mock.calls[1]?.[1]?.extra?.openai_cpa_bps).toBeUndefined()
+    expect(updateAccountMock.mock.calls[1]?.[1]?.extra?.unrelated_setting).toBe('keep')
+  })
+
   it('loads and removes Copilot SDK mode without dropping unrelated extra', async () => {
     const account = buildAccount()
     account.extra = { openai_copilot_sdk: true, unrelated_setting: 'keep' }
@@ -3477,3 +3495,5 @@ describe('initial OAuth model scope ownership', () => {
   expect(useNewFeatureNoticeStore().isDismissed(41, NEW_FEATURE_NOTICES.protocolFeatureSwitches)).toBe(true)
   reloaded.unmount()
  })
+
+beforeEach(() => { setActivePinia(createPinia()) })

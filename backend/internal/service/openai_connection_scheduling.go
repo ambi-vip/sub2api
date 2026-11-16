@@ -40,6 +40,14 @@ func openAIConnectionCapabilityFromContext(ctx context.Context) (string, bool) {
 // Responses-family requirement it applies the same connection predicate as
 // prepareAuthConnection; every other account and capability is unchanged.
 func (a *Account) supportsOpenAIEndpointCapabilityForRequest(ctx context.Context, capability OpenAIEndpointCapability) bool {
+	if a.IsCPABPSEnabled() {
+		// Ordinary Responses turns use abstract chat capability in the scheduler.
+		// Resolve the actual ingress route so this does not enable Chat Completions.
+		if required, ok := openAIConnectionCapabilityFromContext(ctx); ok {
+			return a.SupportsOpenAIEndpointCapability(OpenAIEndpointCapability(required))
+		}
+	}
+
 	if a.HasManagedOpenAIConnections() && a.AuthConnectionID == "" {
 		switch capability {
 		case OpenAIEndpointCapabilityChatCompletions, OpenAIEndpointCapabilityResponses, OpenAIEndpointCapabilityResponsesCompact:

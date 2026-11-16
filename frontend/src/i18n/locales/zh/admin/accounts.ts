@@ -1041,6 +1041,12 @@ export default {
         autoBPSSaveFailed: '账号已保存，但自动开启 BPS 规则没保存成功：{error}。可到 智能运维 → 质量运维 手动处理。',
         autoBPSCreateFailed: '账号已创建，但有 {count} 个账号没加上自动开启 BPS 规则：{error}。可到 智能运维 → 质量运维 为它们新建规则。',
         autoBPSUnsupportedSkipped: 'Codex PAT 和 Agent Identity 账号不支持 BPS，没有为它们添加自动开启 BPS 规则。',
+        cpaBPSDesc: '通过独立 CPA-BPS 0.5.31 服务转发。Base URL 填兼容代理地址（例如 http://cpa-bps-gateway:8318/v1），API Key 填 client_api。账号授权在 CPA 面板完成；建议使用独立分组。仅支持 HTTP/SSE Responses，compact 支持情况由 CPA 决定。',
+        cpaBPSHistory: '沿用原包清洗规则：孤立工具回执会被删除，其中可能包含任务交接上下文。用量按整个 CPA 通道统计。',
+        cpaBPSModels: '获取 CPA 模型',
+        cpaBPSTest: '测试已保存通道',
+        cpaBPSSavedTest: '创建后保存并重新打开编辑页即可测试。测试使用已保存的地址和密钥，并会发送一次真实模型请求。',
+        cpaBPSEmptyModels: 'CPA 尚未返回可用模型，请先在 CPA 面板完成授权。',
         copilotSDKDesc: '保留 Codex 原生工具结构，断连时取消 SDK 回合。请使用仅含一个 sidecar 账号的独立分组；Base URL 和 API Key 填适配服务地址及密钥。',
         oauthPassthroughDesc:
           '开启后，该 OpenAI 账号将自动透传请求与响应，仅替换认证并保留计费/并发/审计及必要安全过滤；如遇兼容性问题可随时关闭回滚。',

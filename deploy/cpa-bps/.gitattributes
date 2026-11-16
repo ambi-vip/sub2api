@@ -1,0 +1,4 @@
+# Preserve imported bytes, including CRLF, for SOURCE.json SHA256 verification.
+assets/*.py -text
+scripts/*.py -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+references/*.md -text

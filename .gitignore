@@ -239,3 +239,8 @@ issues/
 tools/local-worker/
 
 !docs/key-risk-patrol.md
+
+# CPA-BPS deployment sources and validation record
+!deploy/cpa-bps/scripts/
+!deploy/cpa-bps/scripts/*.py
+!docs/cpa-bps-validation.md

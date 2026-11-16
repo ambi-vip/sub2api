@@ -3034,6 +3034,20 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 }
 
 func (h *AccountHandler) respondAvailableModels(c *gin.Context, account *service.Account) {
+	if account.IsCPABPSEnabled() {
+		if h.accountTestService == nil {
+			response.Error(c, http.StatusBadGateway, "CPA-BPS model discovery is unavailable")
+			return
+		}
+		models, err := h.accountTestService.FetchOpenAIAccountModels(c.Request.Context(), account)
+		if err != nil {
+			response.Error(c, http.StatusBadGateway, "CPA-BPS model discovery is unavailable")
+			return
+		}
+		response.Success(c, models)
+		return
+	}
+
 	// Handle OpenAI accounts
 	if account.IsOpenAI() {
 		// Prefer the shared, account-keyed upstream catalog. If discovery fails,
@@ -3350,6 +3364,7 @@ func (h *AccountHandler) SyncUpstreamModels(c *gin.Context) {
 // POST /api/v1/admin/accounts/models/sync-upstream-preview
 func (h *AccountHandler) SyncUpstreamModelsPreview(c *gin.Context) {
 	var req struct {
+		CPABPS       bool              `json:"openai_cpa_bps"`
 		Platform     string            `json:"platform" binding:"required"`
 		Type         string            `json:"type" binding:"required"`
 		BaseURL      string            `json:"base_url"`
@@ -3374,6 +3389,14 @@ func (h *AccountHandler) SyncUpstreamModelsPreview(c *gin.Context) {
 			"base_url":      req.BaseURL,
 			"model_mapping": modelMapping,
 		},
+	}
+
+	if req.CPABPS {
+		tempAccount.Extra = map[string]any{service.CPABPSExtraKey: true}
+		if err := service.ValidateCPABPSAccount(tempAccount); err != nil {
+			response.BadRequest(c, err.Error())
+			return
+		}
 	}
 
 	if h.accountTestService == nil {

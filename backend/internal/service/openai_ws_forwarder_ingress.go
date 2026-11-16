@@ -619,6 +619,9 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		return admissionErr
 	}
 	account = latest
+	if account.IsCPABPSEnabled() {
+		return NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "CPA-BPS accounts require HTTP/SSE", nil)
+	}
 	if account.IsSIWCEnabled() {
 		return NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "SIWC accounts require HTTP/SSE", nil)
 	}

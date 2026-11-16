@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+runtime/
+secrets/
+bundle/
+download/
+installation.json
+compose.json

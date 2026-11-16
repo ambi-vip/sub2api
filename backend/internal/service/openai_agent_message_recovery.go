@@ -321,6 +321,16 @@ func (s *OpenAIGatewayService) checkOpenAIAgentRecoveryDispatch(ctx context.Cont
 	if !openAIAgentRecoveryBound(ctx) {
 		return nil
 	}
+	if account.IsCPABPSEnabled() {
+		request := openAIAgentRecoveryFromContext(ctx)
+		// CPA owns compatibility transforms. An authenticated response pointer
+		// can continue on its producer (checked above), but CPA must not consume
+		// native encrypted-owner evidence or an already-rebuilt native history.
+		if request.owner == nil && !request.preservesHistory() {
+			return nil
+		}
+		return openAIAgentRecoveryError("route_changed")
+	}
 	model := gjson.GetBytes(body, "model").String()
 	// Native remote compaction v2 stays on the proven HTTP Responses route and is
 	// rechecked against the owner's exact wire at send time. The legacy

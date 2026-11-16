@@ -227,6 +227,13 @@ func (s *AccountTestService) FetchUpstreamSupportedModels(ctx context.Context, a
 // snapshot. When no model is complete, the existing account snapshot is left
 // untouched.
 func (s *AccountTestService) SyncUpstreamModelCatalog(ctx context.Context, account *Account) (*UpstreamModelCatalog, error) {
+	if account.IsCPABPSEnabled() {
+		models, _, _, err := s.fetchUpstreamModelListRequest(ctx, account)
+		if err != nil {
+			return nil, err
+		}
+		return &UpstreamModelCatalog{Models: models, Metadata: map[string]UpstreamModelMetadata{}, DiscoverySource: "upstream"}, nil
+	}
 	fetched, err := s.fetchUpstreamModelListWithObservation(ctx, account)
 	var (
 		models          []string
@@ -832,6 +839,17 @@ func (s *AccountTestService) fetchUpstreamModelListRequest(ctx context.Context, 
 	if account.Platform == PlatformAntigravity && account.Type != AccountTypeAPIKey {
 		models, body, err := s.fetchAntigravityOAuthUpstreamModels(ctx, account)
 		return models, body, nil, err
+	}
+	if account.IsCPABPSEnabled() {
+		if s.openaiGatewayService == nil {
+			return nil, nil, nil, newUpstreamModelSyncConfigError("CPA-BPS gateway is unavailable", nil)
+		}
+		response, err := s.openaiGatewayService.fetchCPABPSModels(ctx, account)
+		if err != nil {
+			return nil, nil, nil, newUpstreamModelSyncUpstreamError("CPA-BPS model discovery failed", err)
+		}
+		models, _, err := extractUpstreamModelCatalog(response.Body, false)
+		return models, response.Body, nil, err
 	}
 	if account.IsExcelBPSEnabled() && s.openaiGatewayService != nil {
 		response, err := s.openaiGatewayService.FetchOpenAIModelsList(ctx, account)

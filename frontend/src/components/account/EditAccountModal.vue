@@ -2194,9 +2194,12 @@
         </p>
       </div>
 
+      <CPABPSAccountSettings v-if="account?.platform === 'openai' && account?.type === 'apikey'"
+        v-model="cpaBPSEnabled" :user-id="authStore.user?.id" :account="account" />
+
       <div v-if="account?.platform === 'openai' && account?.type === 'apikey'" class="border-t border-gray-200 pt-4 dark:border-dark-600">
         <label class="flex items-center gap-2">
-          <input v-model="copilotSDKEnabled" type="checkbox" data-testid="copilot-sdk-toggle" />
+          <input v-model="copilotSDKEnabled" :disabled="cpaBPSEnabled" type="checkbox" data-testid="copilot-sdk-toggle" />
           <span>Copilot SDK</span>
         </label>
         <p class="input-hint">{{ t('admin.accounts.openai.copilotSDKDesc') }}</p>
@@ -2457,7 +2460,7 @@
 
       <!-- OpenAI WS Mode 三态（off/ctx_pool/passthrough） -->
       <div
-        v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token' || account?.type === 'apikey')"
+        v-if="!cpaBPSEnabled && account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token' || account?.type === 'apikey')"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
         <div class="flex items-center justify-between">
@@ -3794,6 +3797,7 @@ import { useExcelBPSDefaults } from '@/composables/useExcelBPSDefaults'
 import { DEFAULT_BPS_RECOVERY_INTERVAL_MINUTES, MAX_BPS_RECOVERY_INTERVAL_MINUTES, isValidBPSRecoveryInterval, bpsRecoveryIntervalOrDefault } from '@/utils/excelBPSRecovery'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
+import CPABPSAccountSettings from './CPABPSAccountSettings.vue'
 import NewFeatureBadge from '@/components/common/NewFeatureBadge.vue'
 import { NEW_FEATURE_NOTICES } from '@/constants/newFeatureNotices'
 
@@ -4668,6 +4672,8 @@ const excelBPS403GroupOptions = computed(() => [
     .map(group => ({ value: group.id, label: group.name }))
 ])
 const copilotSDKEnabled = ref(false)
+const cpaBPSEnabled = ref(false)
+watch(cpaBPSEnabled, enabled => { if (enabled) copilotSDKEnabled.value = false })
 const openAIRequestTimezone = ref('Asia/Singapore')
 const extraImageModels = ref('')
 const extraImageModelPrefixes = ref('')
@@ -5242,6 +5248,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   prismBrowserEnabled.value = false
   prismBrowserModels.value = [...prismSupportedModels]
   copilotSDKEnabled.value = false
+  cpaBPSEnabled.value = false
   openAIRequestTimezone.value = 'Asia/Singapore'
   extraImageModels.value = ''
   extraImageModelPrefixes.value = ''
@@ -5294,6 +5301,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     excelBPSAutoMoveOn403.value = newAccount.type === 'oauth' && extra?.openai_excel_bps_auto_move_on_403 === true
     const targetGroupID = extra?.openai_excel_bps_403_target_group_id
     excelBPS403TargetGroupID.value = typeof targetGroupID === 'number' && Number.isSafeInteger(targetGroupID) && targetGroupID >= 0 ? targetGroupID : ''
+    cpaBPSEnabled.value = newAccount.type === 'apikey' && extra?.openai_cpa_bps === true
     copilotSDKEnabled.value = newAccount.type === 'apikey' && extra?.openai_copilot_sdk === true
     openAIRequestTimezone.value = typeof extra?.openai_request_timezone === 'string' ? extra.openai_request_timezone : 'Asia/Singapore'
     extraImageModels.value = readExtraImageModels(extra?.extra_image_models)
@@ -6449,6 +6457,8 @@ const handleSubmit = async () => {
         base_url: newBaseUrl
       }
 
+      if (props.account.platform === 'openai' && cpaBPSEnabled.value) newCredentials.api_protocol = 'responses'
+
       // 国产供应商：模式与协议写入凭据（决定额度/余额探测与转发端点/格式）。
       if (isCNApiKeyAccount.value) {
         newCredentials.account_mode = currentOpenCodeOrCNMode()
@@ -7080,6 +7090,8 @@ const handleSubmit = async () => {
       }
       delete newExtra.responses_websockets_v2_enabled
       delete newExtra.openai_ws_enabled
+      if (props.account.type === 'apikey' && cpaBPSEnabled.value) newExtra.openai_cpa_bps = true
+      else delete newExtra.openai_cpa_bps
       if (props.account.type === 'apikey' && copilotSDKEnabled.value) {
         newExtra.openai_copilot_sdk = true
       } else {

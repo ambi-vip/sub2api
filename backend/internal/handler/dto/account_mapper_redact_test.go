@@ -183,3 +183,15 @@ func TestAccountFromService_RedactsGrokModelDiagnostics(t *testing.T) {
 	require.NotContains(t, string(listRaw), "grok_model_diagnostics")
 	require.NotContains(t, string(listRaw), "access-secret")
 }
+
+func TestCPABPSAccountDTOExposesModeWithoutClientKey(t *testing.T) {
+	account := &service.Account{ID: 71, Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey,
+		Credentials: map[string]any{"api_key": "synthetic-cpa-secret", "base_url": "http://cpa-bps-gateway:8318/v1"}, Extra: map[string]any{service.CPABPSExtraKey: true}}
+	got := AccountFromServiceShallow(account)
+	require.Equal(t, true, got.Extra[service.CPABPSExtraKey])
+	require.True(t, got.CredentialsStatus["has_api_key"])
+	encoded, err := json.Marshal(got)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "synthetic-cpa-secret")
+	require.Equal(t, "synthetic-cpa-secret", account.GetCredential("api_key"))
+}

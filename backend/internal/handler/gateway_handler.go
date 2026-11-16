@@ -1189,6 +1189,18 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 		platform = forcedPlatform
 	}
 
+	if platform == service.PlatformOpenAI && apiKey != nil && apiKey.Group != nil && !apiKey.Group.CodexModelsManifestConfig.Enabled && h.openAIGatewayService != nil {
+		response, account, handled, err := h.openAIGatewayService.FetchCPABPSGroupModels(c.Request.Context(), apiKey.Group, modelsIfNoneMatch(c))
+		if err != nil {
+			writeOpenAIModelsError(c, http.StatusBadGateway, "upstream_error", "CPA-BPS model discovery is unavailable")
+			return
+		}
+		if handled {
+			setOpsSelectedAccount(c, account.ID, account.Platform)
+			writeOpenAIModelsResponse(c, response)
+			return
+		}
+	}
 	if platform == service.PlatformOpenAI && apiKey != nil && apiKey.Group != nil &&
 		apiKey.Group.Platform == service.PlatformOpenAI && apiKey.Group.CodexModelsManifestConfig.Enabled {
 		h.pinnedOpenAIModels(c, apiKey.Group)

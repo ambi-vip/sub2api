@@ -3319,9 +3319,12 @@
         </p>
       </div>
 
+      <CPABPSAccountSettings v-if="form.platform === 'openai' && accountCategory === 'apikey'"
+        v-model="cpaBPSEnabled" :user-id="authStore.user?.id" :preview="syncPreviewCredentials" />
+
       <div v-if="form.platform === 'openai' && accountCategory === 'apikey'" class="border-t border-gray-200 pt-4 dark:border-dark-600">
         <label class="flex items-center gap-2">
-          <input v-model="copilotSDKEnabled" type="checkbox" data-testid="copilot-sdk-toggle" />
+          <input v-model="copilotSDKEnabled" :disabled="cpaBPSEnabled" type="checkbox" data-testid="copilot-sdk-toggle" />
           <span>Copilot SDK</span>
         </label>
         <p class="input-hint">{{ t('admin.accounts.openai.copilotSDKDesc') }}</p>
@@ -3411,7 +3414,7 @@
 
       <!-- OpenAI WS Mode 三态（off/ctx_pool/passthrough） -->
       <div
-        v-if="form.platform === 'openai' && (accountCategory === 'oauth-based' || accountCategory === 'apikey')"
+        v-if="!cpaBPSEnabled && form.platform === 'openai' && (accountCategory === 'oauth-based' || accountCategory === 'apikey')"
         data-testid="create-openai-ws-mode"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
@@ -4360,6 +4363,7 @@ import type { CodexSessionImportRequest as UpstreamImportRequest, OpenAICodexPAT
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Select from '@/components/common/Select.vue'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
+import CPABPSAccountSettings from './CPABPSAccountSettings.vue'
 import NewFeatureBadge from '@/components/common/NewFeatureBadge.vue'
 import { NEW_FEATURE_NOTICES } from '@/constants/newFeatureNotices'
 import UpstreamRequestIdHeaderField from '@/components/account/UpstreamRequestIdHeaderField.vue'
@@ -4946,6 +4950,8 @@ const applyGrokOAuthUpstreamConfig = (credentials: Record<string, unknown>) => {
 const interceptWarmupRequests = ref(false)
 const autoPauseOnExpired = ref(true)
 const copilotSDKEnabled = ref(false)
+const cpaBPSEnabled = ref(false)
+watch(cpaBPSEnabled, enabled => { if (enabled) copilotSDKEnabled.value = false })
 const openAIRequestTimezone = ref('Asia/Singapore')
 const extraImageModels = ref('')
 const extraImageModelPrefixes = ref('')
@@ -5499,6 +5505,7 @@ watch(
     }
     if (newPlatform !== 'openai') {
       copilotSDKEnabled.value = false
+      cpaBPSEnabled.value = false
       openaiPassthroughEnabled.value = false
       openaiFlattenNamespacesEnabled.value = false
       openAIEndpointCapabilities.value = ['chat_completions', 'embeddings']
@@ -6056,6 +6063,7 @@ const resetForm = () => {
   interceptWarmupRequests.value = false
   autoPauseOnExpired.value = true
   copilotSDKEnabled.value = false
+  cpaBPSEnabled.value = false
   openaiPassthroughEnabled.value = false
   openaiFlattenNamespacesEnabled.value = false
   openAILongContextBillingEnabled.value = false
@@ -6165,6 +6173,8 @@ const buildOpenAIExtra = (base?: Record<string, unknown>): Record<string, unknow
   // 清理兼容旧键，统一改用分类型开关。
   delete extra.responses_websockets_v2_enabled
   delete extra.openai_ws_enabled
+  if (accountCategory.value === 'apikey' && cpaBPSEnabled.value) extra.openai_cpa_bps = true
+  else delete extra.openai_cpa_bps
   if (accountCategory.value === 'apikey' && copilotSDKEnabled.value) {
     extra.openai_copilot_sdk = true
   } else {
@@ -6571,6 +6581,7 @@ const handleSubmit = async () => {
     base_url: apiKeyBaseUrl.value.trim() || defaultBaseUrl,
     api_key: apiKeyValue.value.trim()
   }
+  if (form.platform === 'openai' && cpaBPSEnabled.value) credentials.api_protocol = 'responses'
   if (form.platform === 'gemini' && isOfficialGeminiBaseUrl(apiKeyBaseUrl.value)) {
     credentials.tier_id = geminiTierAIStudio.value
   }

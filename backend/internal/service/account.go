@@ -1759,6 +1759,9 @@ func (a *Account) IsCodingPlan() bool {
 // （与既有行为完全一致）。responses 协议仅 deepseek / kimi / minimax 支持（官方原生
 // Responses 端点，适配 Codex）；zhipu 无此端点。
 func (a *Account) GetAPIProtocol() string {
+	if a.IsCPABPSEnabled() {
+		return APIProtocolResponses
+	}
 	if a == nil || !a.IsMultiProtocolAPIKey() {
 		return APIProtocolChatCompletions
 	}
@@ -2130,6 +2133,10 @@ func (a *Account) GetOpenAISessionID() string {
 }
 
 func (a *Account) SupportsOpenAIEndpointCapability(capability OpenAIEndpointCapability) bool {
+	if a.IsCPABPSEnabled() {
+		return capability == "" || capability == OpenAIEndpointCapabilityResponses || capability == OpenAIEndpointCapabilityResponsesCompact
+	}
+
 	if a.HasManagedOpenAIConnections() && a.AuthConnectionID == "" {
 		return a.managedConnectionSupports(string(capability))
 	}
@@ -2425,7 +2432,7 @@ func (a *Account) IsOveragesEnabled() bool {
 // 兼容字段：accounts.extra.openai_oauth_passthrough（历史 OAuth 开关）。
 // 字段缺失或类型不正确时，按 false（关闭）处理。
 func (a *Account) IsOpenAIPassthroughEnabled() bool {
-	if a.IsCopilotSDKEnabled() {
+	if a.IsCPABPSEnabled() || a.IsCopilotSDKEnabled() {
 		return true
 	}
 	if a == nil || !a.IsOpenAI() || a.Extra == nil {
@@ -2610,7 +2617,7 @@ func (a *Account) IsOpenAIResponsesWebSocketV2Enabled() bool {
 	if a.IsSIWCEnabled() {
 		return false
 	}
-	if a.IsCopilotSDKEnabled() || a.isExcelBPSAllModelsEnabled() {
+	if a.IsCPABPSEnabled() || a.IsCopilotSDKEnabled() || a.isExcelBPSAllModelsEnabled() {
 		return false
 	}
 	if a == nil || !a.IsOpenAI() || a.Extra == nil {
@@ -2687,7 +2694,7 @@ func (a *Account) ResolveOpenAIResponsesWebSocketV2Mode(defaultMode string) stri
 	if a.IsSIWCEnabled() {
 		return OpenAIWSIngressModeOff
 	}
-	if a.IsCopilotSDKEnabled() || a.isExcelBPSAllModelsEnabled() {
+	if a.IsCPABPSEnabled() || a.IsCopilotSDKEnabled() || a.isExcelBPSAllModelsEnabled() {
 		return OpenAIWSIngressModeOff
 	}
 	resolvedDefault := normalizeOpenAIWSIngressDefaultMode(defaultMode)
@@ -2760,7 +2767,7 @@ func (a *Account) ResolveOpenAIResponsesWebSocketV2Mode(defaultMode string) stri
 // IsOpenAIWSForceHTTPEnabled 返回账号级"强制 HTTP"开关。
 // 字段：accounts.extra.openai_ws_force_http。
 func (a *Account) IsOpenAIWSForceHTTPEnabled() bool {
-	if a.IsCopilotSDKEnabled() || a.isExcelBPSAllModelsEnabled() {
+	if a.IsCPABPSEnabled() || a.IsCopilotSDKEnabled() || a.isExcelBPSAllModelsEnabled() {
 		return true
 	}
 	if a == nil || !a.IsOpenAI() || a.Extra == nil {

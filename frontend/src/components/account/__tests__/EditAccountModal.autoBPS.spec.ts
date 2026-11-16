@@ -1,3 +1,4 @@
+import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
@@ -348,3 +349,5 @@ describe('EditAccountModal auto BPS switch', () => {
     expect(mocks.updatePlan).not.toHaveBeenCalled()
   })
 })
+
+beforeEach(() => { setActivePinia(createPinia()) })

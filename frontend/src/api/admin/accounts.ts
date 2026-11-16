@@ -685,6 +685,7 @@ export async function syncUpstreamModels(
 }
 
 export interface SyncUpstreamPreviewParams {
+  openai_cpa_bps?: boolean
   platform: string
   type: string
   base_url?: string

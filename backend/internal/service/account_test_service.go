@@ -927,6 +927,18 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		}
 	}
 
+	if account.IsCPABPSEnabled() {
+		if s.openaiGatewayService == nil {
+			return s.sendErrorAndEnd(c, "CPA-BPS gateway is unavailable")
+		}
+		if strings.TrimSpace(modelID) == "" {
+			return s.sendErrorAndEnd(c, "Select a model returned by the CPA-BPS model list")
+		}
+		if mode != "" && mode != AccountTestModeDefault {
+			return s.sendErrorAndEnd(c, "Use a Responses client for CPA-BPS compact and tool tests")
+		}
+		return s.testResponsesGatewayAccountConnection(c, account, modelID, prompt)
+	}
 	if account.IsSIWCEnabled() {
 		recordQualityBatchRoute(c, account, modelID, "openai:siwc")
 		if s.openaiGatewayService == nil {
@@ -1184,7 +1196,9 @@ func (s *AccountTestService) testResponsesGatewayAccountConnection(c *gin.Contex
 	if model == "" {
 		model = openai.DefaultTestModel
 	}
-	model = account.GetMappedModel(model)
+	if !account.IsCPABPSEnabled() {
+		model = account.GetMappedModel(model)
+	}
 	prompt = promptOrDefault(prompt)
 	s.sendEvent(c, TestEvent{Type: "test_start", Model: model})
 

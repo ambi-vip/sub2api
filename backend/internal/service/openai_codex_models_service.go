@@ -109,6 +109,7 @@ func codexProviderQualifiedModelID(modelID string) string {
 // OpenAIModelsResponse carries either an OpenAI model list or a Codex manifest
 // together with upstream and client caching metadata.
 type OpenAIModelsResponse struct {
+	authoritativeCatalog         bool
 	Body                         []byte
 	ETag                         string
 	upstreamETag                 string
@@ -133,6 +134,9 @@ func (s *OpenAIGatewayService) BuildGroupConfiguredCodexModelsManifest(
 	visible, catalog, err := loadCodexGroupCatalogAccounts(ctx, s.accountRepo, group.ID)
 	if err != nil {
 		return nil, false, fmt.Errorf("load group configured Codex models: %w", err)
+	}
+	if manifest, _, handled, err := s.fetchCPABPSCatalogForGroup(ctx, group, visible, catalog, true, ifNoneMatch); handled || err != nil {
+		return manifest, handled, err
 	}
 	configuredModels := openAIConfiguredCodexModelIDsForGroup(visible, group)
 	if len(configuredModels) == 0 {
@@ -187,6 +191,14 @@ func (s *OpenAIGatewayService) MergeGroupConfiguredCodexModels(
 		return nil
 	}
 
+	if manifest.authoritativeCatalog {
+		body, _, err := mergeConfiguredCodexModelsManifest(manifest.Body, nil, group.ModelAllowlist.Models, group.ModelAllowlistEnabled())
+		if err != nil {
+			return err
+		}
+		*manifest = *openAIModelsResponseForClient(&OpenAIModelsResponse{Body: body, ETag: codexModelsManifestBodyETag(body), authoritativeCatalog: true}, ifNoneMatch)
+		return nil
+	}
 	visible, catalog, err := loadCodexGroupCatalogAccounts(ctx, s.accountRepo, group.ID)
 	if err != nil {
 		return fmt.Errorf("load group configured Codex capabilities: %w", err)
@@ -1731,6 +1743,21 @@ func (c *openAIModelsCache) set(key string, manifest *OpenAIModelsResponse, now 
 // passed through verbatim. Custom API key manifests receive only the narrowly
 // scoped compatibility adjustments required by custom-provider Codex clients.
 func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, account *Account, clientVersion, ifNoneMatch string) (*OpenAIModelsResponse, error) {
+	if account.IsCPABPSEnabled() {
+		list, err := s.fetchCPABPSModels(ctx, account)
+		if err != nil {
+			return nil, err
+		}
+		body := []byte(`{"models":[]}`)
+		_, entries, err := modelCatalogEntries(list.Body, "data")
+		if err != nil {
+			return nil, err
+		}
+		if len(entries) > 0 {
+			body = convertOpenAIModelListToCodexManifestForAccount(list.Body, account)
+		}
+		return openAIModelsResponseForClient(&OpenAIModelsResponse{Body: body, ETag: codexModelsManifestBodyETag(body), authoritativeCatalog: true}, ifNoneMatch), nil
+	}
 	if account != nil && account.IsExcelBPSEnabled() {
 		return s.fetchExcelBPSCodexManifest(ctx, account, ifNoneMatch)
 	}

@@ -1,3 +1,4 @@
+import { createPinia, setActivePinia } from 'pinia'
 vi.mock('@/api/admin/upstreamChannels', () => ({ listUpstreamChannels: vi.fn(), readChannelBindings: vi.fn(), bindChannelAccounts: vi.fn() }))
 import { readChannelBindings, listUpstreamChannels } from '@/api/admin/upstreamChannels'
 import UpstreamChannelSelector from '../UpstreamChannelSelector.vue'
@@ -829,6 +830,23 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
 
     expect(wrapper.find('[data-testid="openai-long-context-billing-toggle"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="create-openai-ws-mode"]').exists()).toBe(true)
+  })
+
+  it('persists CPA-BPS with Responses and disables the conflicting Copilot mode', async () => {
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'OpenAI')
+    await selectButtonByText(wrapper, 'API Key')
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('CPA instance')
+    await wrapper.get('form#create-account-form input[type="password"]').setValue('test-key')
+    await wrapper.get('[data-testid="copilot-sdk-toggle"]').setValue(true)
+    await wrapper.get('[data-testid="cpa-bps-toggle"]').setValue(true)
+    expect(wrapper.get<HTMLInputElement>('[data-testid="copilot-sdk-toggle"]').element.disabled).toBe(true)
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+    const saved = createAccountMock.mock.calls[0]?.[0]
+    expect(saved?.extra?.openai_cpa_bps).toBe(true)
+    expect(saved?.extra?.openai_copilot_sdk).toBeUndefined()
+    expect(saved?.credentials?.api_protocol).toBe('responses')
   })
 
   it('persists Copilot SDK mode for an API key account', async () => {
@@ -1798,3 +1816,5 @@ describe('explicit upstream channel on account creation', () => {
   expect(w.find('[data-testid="confirm-create-channel"]').exists()).toBe(true)
  })
 })
+
+beforeEach(() => { setActivePinia(createPinia()) })

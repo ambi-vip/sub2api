@@ -749,3 +749,29 @@ func TestQualityLiveAvailableModelsReturnsCredentialReasonInsteadOfLocalFallback
 	require.Contains(t, w.Body.String(), `"credential_state":"revoked"`)
 	require.NotContains(t, w.Body.String(), "synthetic-private-provider-text")
 }
+
+func TestCPABPSAvailableModelsNeverFallsBack(t *testing.T) {
+	for _, status := range []int{200, 401, 500} {
+		account := service.Account{ID: 71, Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey,
+			Credentials: map[string]any{"api_key": "synthetic-key", "base_url": "https://cpa.example/v1"}, Extra: map[string]any{service.CPABPSExtraKey: true}}
+		svc := &availableModelsAdminService{stubAdminService: newStubAdminService(), account: account}
+		upstream := &syncUpstreamHTTPUpstream{resp: &http.Response{StatusCode: status, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"data":[]}`))}}
+		cfg := &config.Config{}
+		gateway := service.NewOpenAIGatewayService(nil, nil, nil, nil, nil, nil, nil, nil, cfg, nil, nil, nil, nil, nil, upstream, nil, nil, nil, nil, nil, nil, nil, nil)
+		tests := service.NewAccountTestService(nil, nil, nil, nil, nil, upstream, cfg, nil)
+		tests.SetOpenAIGatewayService(gateway)
+		h := NewAccountHandler(svc, nil, nil, nil, nil, nil, nil, nil, tests, nil, nil, nil, nil, nil)
+		router := gin.New()
+		router.GET("/accounts/:id/models", h.GetAvailableModels)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, httptest.NewRequest("GET", "/accounts/71/models", nil))
+		if status == 200 {
+			require.Equal(t, 200, w.Code)
+			require.Contains(t, w.Body.String(), `"data":[]`)
+		} else {
+			require.Equal(t, 502, w.Code)
+		}
+		require.NotContains(t, w.Body.String(), "gpt-")
+		require.Len(t, upstream.requests, 1)
+	}
+}

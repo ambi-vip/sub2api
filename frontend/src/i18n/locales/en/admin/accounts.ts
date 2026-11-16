@@ -923,6 +923,12 @@ export default {
         autoBPSSaveFailed: 'The account was saved, but the auto-BPS rule was not: {error}. Fix it under Smart operations → Quality operations.',
         autoBPSCreateFailed: 'The accounts were created, but {count} of them did not get the auto-BPS rule: {error}. Add it under Smart operations → Quality operations.',
         autoBPSUnsupportedSkipped: 'Codex PAT and Agent Identity accounts do not support BPS, so no auto-BPS rule was added for them.',
+        cpaBPSDesc: 'Forward through the standalone CPA-BPS 0.5.31 service. Set Base URL to the compatibility gateway (for example http://cpa-bps-gateway:8318/v1) and API Key to client_api. Authorize accounts in the CPA panel and use a dedicated group. Supports HTTP/SSE Responses; compact availability depends on CPA.',
+        cpaBPSHistory: 'Uses the original sanitizer: orphan tool outputs are removed, potentially including task handoff context. Usage is recorded for the entire CPA channel.',
+        cpaBPSModels: 'Fetch CPA models',
+        cpaBPSTest: 'Test saved channel',
+        cpaBPSSavedTest: 'After creating the account, save and reopen the editor to test. Tests use saved credentials and send a real model request.',
+        cpaBPSEmptyModels: 'CPA returned no available models. Complete authorization in the CPA panel first.',
         copilotSDKDesc: 'Preserve native Codex tools and cancel SDK turns on disconnect. Use a dedicated group with one sidecar account; Base URL and API Key belong to the sidecar.',
         oauthPassthroughDesc:
           'When enabled, this OpenAI account uses automatic passthrough: the gateway forwards request/response as-is and only swaps auth, while keeping billing/concurrency/audit and necessary safety filtering.',

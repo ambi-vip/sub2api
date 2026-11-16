@@ -150,7 +150,11 @@ func (s *OpenAIGatewayService) FetchPinnedCodexModelsManifest(ctx context.Contex
 	if len(results) == 1 && bytes.Equal(merged, results[0].response.Body) {
 		return results[0].response, results[0].account, nil
 	}
-	return &OpenAIModelsResponse{Body: merged, ETag: codexModelsManifestBodyETag(merged)}, results[0].account, nil
+	authoritative := true
+	for _, result := range results {
+		authoritative = authoritative && result.response.authoritativeCatalog
+	}
+	return &OpenAIModelsResponse{Body: merged, ETag: codexModelsManifestBodyETag(merged), authoritativeCatalog: authoritative}, results[0].account, nil
 }
 
 type pinnedOpenAIModelsResult struct {

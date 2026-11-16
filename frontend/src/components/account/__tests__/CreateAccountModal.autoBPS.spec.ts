@@ -1,3 +1,4 @@
+import { createPinia, setActivePinia } from 'pinia'
 
 vi.mock('@/api/admin/credentialEncryption', () => ({
   getCredentialEncryption: vi.fn().mockResolvedValue({ configured: true, source: 'server_config' }),
@@ -244,3 +245,5 @@ describe('CreateAccountModal auto BPS switch', () => {
     expect(wrapper.emitted('created')).toHaveLength(1)
   })
 })
+
+beforeEach(() => { setActivePinia(createPinia()) })

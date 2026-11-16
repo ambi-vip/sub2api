@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go.uber.org/zap"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -1023,7 +1024,8 @@ func TestOpenAIResponses_FunctionCallOutputHTTPGuidanceDoesNotSuggestPreviousRes
 	})
 
 	h := newOpenAIHandlerForPreviousResponseIDValidation(t, nil)
-	h.Responses(c)
+	// Validation now runs after selecting a non-CPA account. Test its HTTP guidance directly.
+	require.False(t, h.validateFunctionCallOutputRequest(c, []byte(`{"model":"gpt-5.1","input":[{"type":"function_call_output","output":"{}"}]}`), zap.NewNop()))
 
 	require.Equal(t, http.StatusBadRequest, w.Code)
 	require.Contains(t, w.Body.String(), "Responses WebSocket v2")

@@ -626,6 +626,9 @@ func (s *OpenAIGatewayService) ForwardImages(
 	channelMappedModel string,
 ) (*OpenAIForwardResult, error) {
 
+	if account.IsCPABPSEnabled() {
+		return nil, cpaBPSUnsupported(c)
+	}
 	if parsed == nil {
 		return nil, fmt.Errorf("parsed images request is required")
 	}

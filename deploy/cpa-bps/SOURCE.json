@@ -1,0 +1,44 @@
+{
+  "source": "user-provided bps share package",
+  "package_version": "1.0.0",
+  "upstream_version": "0.5.31",
+  "upstream_commit": "aaee30218e174e5a6c495b935d20d4014d432f49",
+  "files": {
+    "references/troubleshooting.md": {
+      "source_sha256": "485993ac0779679cb6be3d3c50e2dc4c789506f99d5c419ed9890e79da5b35ba",
+      "modified": false
+    },
+    "references/sources.md": {
+      "source_sha256": "e31228ad25df1abc25668b7ada66d9e30b0578294e32b793eead70c73a2693d9",
+      "modified": false
+    },
+    "references/validation.md": {
+      "source_sha256": "cdcdc33a54ff7df57b2800848eb4c3f315a19d847b0125ed68c10bc5bf244af4",
+      "modified": false
+    },
+    "scripts/bps.py": {
+      "source_sha256": "c38c489d59117e38e81ae038574d656bb5619bce3f51d1486895a9b806f1f3b2",
+      "modified": true
+    },
+    "scripts/test_bootstrap.py": {
+      "source_sha256": "4310edceaf4d55b9ffbb43d2aca6da31bc4c3b4f29d6bd67e492007cb08cb97d",
+      "modified": false
+    },
+    "scripts/test_sanitize_proxy.py": {
+      "source_sha256": "5decf19f6a9e86d66d7148307df5c601f3ba00d0c40a9cb9e24ffeb95db61f54",
+      "modified": false
+    },
+    "scripts/test_proxy_capacity.py": {
+      "source_sha256": "d1abc709c066a090dc510fb16ffb61e00f34e205e56150ecceab30b6a3a91df9",
+      "modified": false
+    },
+    "scripts/test_proxy_resources.py": {
+      "source_sha256": "792f3847f9e3d59d1ad9daaf6b4f91a2eabec2af41fd093cde5844efaf29180e",
+      "modified": false
+    },
+    "assets/bps-sanitize-proxy.py": {
+      "source_sha256": "67eef71f47a4f038e00f066ec3e4cabefdfb011a5bca3775144209eeff3d3e8e",
+      "modified": false
+    }
+  }
+}

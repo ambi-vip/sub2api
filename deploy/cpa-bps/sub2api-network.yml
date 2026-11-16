@@ -1,0 +1,11 @@
+# Merge with your existing Sub2API Compose file. Create this network first:
+# docker network create sub2api-cpa-bps
+services:
+  sub2api:
+    networks:
+      - default
+      - cpa_bps
+networks:
+  cpa_bps:
+    external: true
+    name: ${CPA_BPS_NETWORK:-sub2api-cpa-bps}
